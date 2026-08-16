@@ -1,5 +1,5 @@
 [package]
-name = "openai-rs"
+name = "openai-client-rs"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
@@ -7,7 +7,7 @@ description = "Full-featured Rust client for the OpenAI API — Chat, Images, Au
 license = "Apache-2.0"
 repository = "https://github.com/xiefujin/openai-rs"
 homepage = "https://github.com/xiefujin/openai-rs"
-documentation = "https://docs.rs/openai-rs"
+documentation = "https://docs.rs/openai-client-rs"
 readme = "README.md"
 authors = ["xiefujin <490021684@qq.com>"]
 keywords = ["openai", "llm", "chat", "api", "sse", "async", "dall-e", "whisper", "tts", "embeddings", "gpt", "deepseek"]
