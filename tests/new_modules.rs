@@ -1,16 +1,16 @@
 // Copyright (c) 2025 xiefujin <490021684@qq.com>
 // Licensed under Apache-2.0, see LICENSE file for full license terms.
 
-//! Integration tests for new openai-rs modules: retry, tokens, images, audio, files.
+//! Integration tests for new openai-client-rs modules: retry, tokens, images, audio, files.
 
 use serde_json::json;
-use openai_rs::*;
+use openai_client_rs::*;
 
 // ── Retry ──────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_retry_succeeds_on_eventual_success() {
-    use openai_rs::retry::*;
+    use openai_client_rs::retry::*;
     let config = RetryConfig { max_retries: 5, base_delay_ms: 1, max_delay_ms: 10 };
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
@@ -23,7 +23,7 @@ fn test_retry_succeeds_on_eventual_success() {
 
 #[test]
 fn test_retry_stops_at_max() {
-    use openai_rs::retry::*;
+    use openai_client_rs::retry::*;
     let config = RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 };
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
@@ -36,7 +36,7 @@ fn test_retry_stops_at_max() {
 
 #[test]
 fn test_retry_non_retryable_immediate() {
-    use openai_rs::retry::*;
+    use openai_client_rs::retry::*;
     let config = RetryConfig::default();
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
@@ -49,7 +49,7 @@ fn test_retry_non_retryable_immediate() {
 
 #[test]
 fn test_retry_delay_grows() {
-    use openai_rs::retry::*;
+    use openai_client_rs::retry::*;
     let config = RetryConfig { max_retries: 10, base_delay_ms: 100, max_delay_ms: 10000 };
     let d0 = config.delay_ms(0);
     let d1 = config.delay_ms(1);
@@ -61,7 +61,7 @@ fn test_retry_delay_grows() {
 
 #[test]
 fn test_retry_with_openai_error() {
-    use openai_rs::retry::*;
+    use openai_client_rs::retry::*;
     let config = RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 };
     let mut calls = 0;
     let result: std::result::Result<i32, OpenAiError> = retry_sync(
@@ -79,26 +79,26 @@ fn test_retry_with_openai_error() {
 
 #[test]
 fn test_count_tokens_english() {
-    let n = openai_rs::tokens::count_tokens("Hello world!");
+    let n = openai_client_rs::tokens::count_tokens("Hello world!");
     assert!(n >= 2 && n <= 6, "got {n}");
 }
 
 #[test]
 fn test_count_tokens_chinese() {
-    let n = openai_rs::tokens::count_tokens("你好世界！");
+    let n = openai_client_rs::tokens::count_tokens("你好世界！");
     assert!(n >= 3 && n <= 6, "got {n}");
 }
 
 #[test]
 fn test_count_tokens_mixed() {
-    let n = openai_rs::tokens::count_tokens("Hello 你好 world 世界");
+    let n = openai_client_rs::tokens::count_tokens("Hello 你好 world 世界");
     assert!(n >= 4, "got {n}");
 }
 
 #[test]
 fn test_count_message_tokens_simple() {
     let msg = ChatMessage::user("Hello!");
-    let n = openai_rs::tokens::count_message_tokens(&msg);
+    let n = openai_client_rs::tokens::count_message_tokens(&msg);
     assert!(n >= 5, "got {n}");
 }
 
@@ -107,7 +107,7 @@ fn test_count_message_tokens_with_tool_calls() {
     let msg = ChatMessage::assistant_with_tools("", vec![
         ToolCall { id: "1".into(), call_type: "function".into(), function: FunctionCall { name: "run".into(), arguments: "{\"a\":1}".into() }}
     ]);
-    let n = openai_rs::tokens::count_message_tokens(&msg);
+    let n = openai_client_rs::tokens::count_message_tokens(&msg);
     assert!(n >= 15, "got {n}");
 }
 
@@ -118,13 +118,13 @@ fn test_count_messages_tokens() {
         ChatMessage::user("Hello"),
         ChatMessage::assistant("Hi there!"),
     ];
-    let n = openai_rs::tokens::count_messages_tokens(&msgs);
+    let n = openai_client_rs::tokens::count_messages_tokens(&msgs);
     assert!(n >= 15, "got {n}");
 }
 
 #[test]
 fn test_estimate_completion_tokens() {
-    let n = openai_rs::tokens::estimate_completion_tokens(100);
+    let n = openai_client_rs::tokens::estimate_completion_tokens(100);
     assert!(n >= 20, "got {n}");
 }
 

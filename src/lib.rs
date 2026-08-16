@@ -1,7 +1,7 @@
 // Copyright (c) 2025 xiefujin <490021684@qq.com>
 // Licensed under Apache-2.0, see LICENSE file for full license terms.
 
-//! # openai-rs
+//! # openai-client-rs
 //!
 //! A Rust client for the OpenAI API — chat completions, embeddings, images,
 //! audio, files, and streaming SSE. Compatible with OpenAI and any
@@ -23,7 +23,7 @@
 //! ## Quick start
 //!
 //! ```rust,no_run
-//! use openai_rs::{OpenAiClient, ChatMessage};
+//! use openai_client_rs::{OpenAiClient, ChatMessage};
 //!
 //! let client = OpenAiClient::new("sk-xxx", "gpt-4o");
 //! let resp = client.chat_create(

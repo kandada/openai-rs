@@ -1,13 +1,13 @@
 // Copyright (c) 2025 xiefujin <490021684@qq.com>
 // Licensed under Apache-2.0, see LICENSE file for full license terms.
 
-//! Integration tests for openai-rs.
+//! Integration tests for openai-client-rs.
 //!
 //! Covers: types serde, request building, SSE parsing, tool calling,
 //! error handling, async SSE, and client configuration.
 
 use serde_json::json;
-use openai_rs::*;
+use openai_client_rs::*;
 
 // ── Types: serialization roundtrips ────────────────────────────────────────
 
@@ -143,7 +143,7 @@ fn test_simplified_tool_call_parsed_args() {
 #[test]
 fn test_user_with_images_serde() {
     let msg = ChatMessage::user_with_images("Look at this", &["https://example.com/pic.png"]);
-    let built = openai_rs::api_common::build_messages_json(&[msg]);
+    let built = openai_client_rs::api_common::build_messages_json(&[msg]);
     let v = &built[0];
     let parts = v["content"].as_array().unwrap();
     assert_eq!(parts[0]["type"], "text");
@@ -156,10 +156,10 @@ fn test_user_with_parts_serde() {
     let msg = ChatMessage::user_with_parts(vec![
         ContentPart::Text { text: "hi".into() },
         ContentPart::ImageUrl {
-            image_url: openai_rs::ImageUrl { url: "https://x.com/a.jpg".into(), detail: Some("high".into()) },
+            image_url: openai_client_rs::ImageUrl { url: "https://x.com/a.jpg".into(), detail: Some("high".into()) },
         },
     ]);
-    let built = openai_rs::api_common::build_messages_json(&[msg]);
+    let built = openai_client_rs::api_common::build_messages_json(&[msg]);
     let v = &built[0];
     let parts = v["content"].as_array().unwrap();
     assert_eq!(parts.len(), 2);
@@ -255,7 +255,7 @@ fn test_sse_parse_content_stream() {
     );
     let cancel = AtomicBool::new(false);
     let mut deltas = Vec::new();
-    let resp = openai_rs::parse_openai_stream(
+    let resp = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |d| deltas.push(d.to_string()),
         |_, _| {},
@@ -278,7 +278,7 @@ fn test_sse_parse_reasoning_content() {
         "data: [DONE]\n\n"
     );
     let cancel = AtomicBool::new(false);
-    let resp = openai_rs::parse_openai_stream(
+    let resp = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |_| {},
         |_, _| {},
@@ -301,7 +301,7 @@ fn test_sse_parse_tool_calls() {
     );
     let cancel = AtomicBool::new(false);
     let mut tools = Vec::new();
-    let resp = openai_rs::parse_openai_stream(
+    let resp = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |_| {},
         |n, a| tools.push((n.to_string(), a.to_string())),
@@ -320,7 +320,7 @@ fn test_sse_parse_cancel() {
 
     let raw = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n";
     let cancel = AtomicBool::new(true);
-    let r = openai_rs::parse_openai_stream(
+    let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |_| {}, |_, _| {}, &cancel,
     );
@@ -334,7 +334,7 @@ fn test_sse_parse_all_malformed() {
 
     let raw = concat!("data: {not json\n\n", "data: [DONE]\n\n");
     let cancel = AtomicBool::new(false);
-    let r = openai_rs::parse_openai_stream(
+    let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |_| {}, |_, _| {}, &cancel,
     );
@@ -348,7 +348,7 @@ fn test_sse_parse_in_stream_error() {
 
     let raw = "data: {\"error\":{\"message\":\"rate limit exceeded\"}}\n\n";
     let cancel = AtomicBool::new(false);
-    let r = openai_rs::parse_openai_stream(
+    let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
         |_| {}, |_, _| {}, &cancel,
     );

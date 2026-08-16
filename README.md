@@ -2,9 +2,9 @@
 <!-- Licensed under Apache-2.0, see LICENSE file for full license terms. -->
 
 
-# openai-rs
+# openai-client-rs
 
-[![Crates.io](https://img.shields.io/crates/v/openai-rs.svg)](https://crates.io/crates/openai-rs)
+[![Crates.io](https://img.shields.io/crates/v/openai-client-rs.svg)](https://crates.io/crates/openai-client-rs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 A full-featured Rust client for the OpenAI API. Compatible with OpenAI, DeepSeek, Kimi, MiniMax, Ollama, and **any OpenAI-compatible provider**.
@@ -29,10 +29,10 @@ A full-featured Rust client for the OpenAI API. Compatible with OpenAI, DeepSeek
 
 ```toml
 [dependencies]
-openai-rs = "0.1"
+openai-client-rs = "0.1"
 
 # With async support
-# openai-rs = { version = "0.1", features = ["async"] }
+# openai-client-rs = { version = "0.1", features = ["async"] }
 ```
 
 ## Quick Start
@@ -40,7 +40,7 @@ openai-rs = "0.1"
 ### Sync (default)
 
 ```rust
-use openai_rs::{OpenAiClient, ChatMessage};
+use openai_client_rs::{OpenAiClient, ChatMessage};
 
 let client = OpenAiClient::new("sk-xxx", "gpt-4o");
 
@@ -54,7 +54,7 @@ println!("{}", resp.text);
 ### Async
 
 ```rust
-use openai_rs::{OpenAiAsyncClient, ChatMessage};
+use openai_client_rs::{OpenAiAsyncClient, ChatMessage};
 
 let client = OpenAiAsyncClient::new("sk-xxx", "gpt-4o");
 let resp = client.chat_create(&[ChatMessage::user("Hi")], None).await.unwrap();
@@ -76,7 +76,7 @@ client.chat_stream(
 ### Tool Calling
 
 ```rust
-use openai_rs::{OpenAiClient, ChatMessage, Tool};
+use openai_client_rs::{OpenAiClient, ChatMessage, Tool};
 use serde_json::json;
 
 let tools = &[Tool::function(
@@ -97,7 +97,7 @@ for tc in &resp.tool_calls {
 ### Request Builder (Full API)
 
 ```rust
-use openai_rs::{ChatCompletionRequest, ResponseFormat, StreamOptions};
+use openai_client_rs::{ChatCompletionRequest, ResponseFormat, StreamOptions};
 
 let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("Hi")])
     .temperature(0.7)
@@ -118,7 +118,7 @@ let resp = client.send(&req).unwrap();
 ## Images (DALL-E)
 
 ```rust
-use openai_rs::{ImageRequest, ImageResponse};
+use openai_client_rs::{ImageRequest, ImageResponse};
 
 let req = ImageRequest::new("a cute cat")
     .model("dall-e-3")
@@ -135,7 +135,7 @@ println!("URL: {}", resp.data[0].url.as_deref().unwrap_or("no url"));
 ### TTS (Text-to-Speech)
 
 ```rust
-use openai_rs::SpeechRequest;
+use openai_client_rs::SpeechRequest;
 
 let req = SpeechRequest::new("tts-1", "Hello world", "alloy").speed(1.0);
 let audio_bytes = client.audio_speech(&req).unwrap();
@@ -145,7 +145,7 @@ std::fs::write("output.mp3", audio_bytes).unwrap();
 ### STT (Speech-to-Text)
 
 ```rust
-use openai_rs::TranscriptionRequest;
+use openai_client_rs::TranscriptionRequest;
 
 let req = TranscriptionRequest::new(base64_audio, "whisper-1")
     .language("en")
@@ -187,7 +187,7 @@ let info = client.models_retrieve("gpt-4o").unwrap();
 ## Auto-Retry
 
 ```rust
-use openai_rs::{RetryConfig, retry};
+use openai_client_rs::{RetryConfig, retry};
 
 let config = RetryConfig { max_retries: 3, ..Default::default() };
 let result = retry_sync(
@@ -200,7 +200,7 @@ let result = retry_sync(
 ## Token Counting
 
 ```rust
-use openai_rs::tokens;
+use openai_client_rs::tokens;
 
 let n = tokens::count_tokens("Hello world");
 let total = tokens::count_messages_tokens(&messages);
@@ -249,7 +249,7 @@ let client = OpenAiClient::new("sk-xxx", "gpt-4o")
 ## Error Handling
 
 ```rust
-use openai_rs::OpenAiError;
+use openai_client_rs::OpenAiError;
 
 match client.chat_create(&[...], None) {
     Ok(resp) => println!("{}", resp.text),

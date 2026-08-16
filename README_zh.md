@@ -2,9 +2,9 @@
 <!-- Licensed under Apache-2.0, see LICENSE file for full license terms. -->
 
 
-# openai-rs
+# openai-client-rs
 
-[![Crates.io](https://img.shields.io/crates/v/openai-rs.svg)](https://crates.io/crates/openai-rs)
+[![Crates.io](https://img.shields.io/crates/v/openai-client-rs.svg)](https://crates.io/crates/openai-client-rs)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 全功能 Rust OpenAI API 客户端。兼容 OpenAI、DeepSeek、Kimi、MiniMax、Ollama 等**任何 OpenAI 兼容的 API 提供商**。
@@ -29,10 +29,10 @@
 
 ```toml
 [dependencies]
-openai-rs = "0.1"
+openai-client-rs = "0.1"
 
 # 异步支持
-# openai-rs = { version = "0.1", features = ["async"] }
+# openai-client-rs = { version = "0.1", features = ["async"] }
 ```
 
 ## 快速开始
@@ -40,7 +40,7 @@ openai-rs = "0.1"
 ### 同步
 
 ```rust
-use openai_rs::{OpenAiClient, ChatMessage};
+use openai_client_rs::{OpenAiClient, ChatMessage};
 
 let client = OpenAiClient::new("sk-xxx", "gpt-4o");
 let resp = client.chat_create(&[ChatMessage::user("Rust 的特点？")], None).unwrap();
@@ -50,7 +50,7 @@ println!("{}", resp.text);
 ### 异步
 
 ```rust
-use openai_rs::{OpenAiAsyncClient, ChatMessage};
+use openai_client_rs::{OpenAiAsyncClient, ChatMessage};
 
 let client = OpenAiAsyncClient::new("sk-xxx", "gpt-4o");
 let resp = client.chat_create(&[ChatMessage::user("你好")], None).await.unwrap();
@@ -70,7 +70,7 @@ client.chat_stream(
 ## 函数调用
 
 ```rust
-use openai_rs::{Tool};
+use openai_client_rs::{Tool};
 use serde_json::json;
 
 let tools = &[Tool::function("get_weather", "查询天气",
@@ -86,7 +86,7 @@ for tc in &resp.tool_calls {
 ## 请求构建器（完整 API 参数）
 
 ```rust
-use openai_rs::{ChatCompletionRequest, ResponseFormat, StreamOptions};
+use openai_client_rs::{ChatCompletionRequest, ResponseFormat, StreamOptions};
 
 let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("你好")])
     .temperature(0.7).top_p(0.9).max_tokens(2048).seed(42)
@@ -101,7 +101,7 @@ let resp = client.send(&req).unwrap();
 ## 图像生成 (DALL-E)
 
 ```rust
-use openai_rs::ImageRequest;
+use openai_client_rs::ImageRequest;
 
 let req = ImageRequest::new("一只可爱的猫")
     .model("dall-e-3").n(1).size("1024x1024").quality("hd");
@@ -114,7 +114,7 @@ println!("URL: {}", resp.data[0].url.as_deref().unwrap_or("无"));
 ### TTS（文字转语音）
 
 ```rust
-use openai_rs::SpeechRequest;
+use openai_client_rs::SpeechRequest;
 let req = SpeechRequest::new("tts-1", "你好世界", "alloy").speed(1.0);
 let bytes = client.audio_speech(&req).unwrap();
 std::fs::write("output.mp3", bytes).unwrap();
@@ -123,7 +123,7 @@ std::fs::write("output.mp3", bytes).unwrap();
 ### STT（语音识别）
 
 ```rust
-use openai_rs::TranscriptionRequest;
+use openai_client_rs::TranscriptionRequest;
 let req = TranscriptionRequest::new(base64_audio, "whisper-1").language("zh");
 let resp = client.audio_transcribe(&req).unwrap();
 println!("识别结果: {}", resp.text);
@@ -140,7 +140,7 @@ let content = client.files_content(&file.id).unwrap();
 ## 自动重试
 
 ```rust
-use openai_rs::{RetryConfig, retry};
+use openai_client_rs::{RetryConfig, retry};
 let config = RetryConfig { max_retries: 3, ..Default::default() };
 let result = retry_sync(|| client.chat_create(&[...], None), &config, |e| e.is_retryable());
 ```
@@ -148,7 +148,7 @@ let result = retry_sync(|| client.chat_create(&[...], None), &config, |e| e.is_r
 ## Token 计数
 
 ```rust
-use openai_rs::tokens;
+use openai_client_rs::tokens;
 let n = tokens::count_tokens("你好世界");
 let total = tokens::count_messages_tokens(&messages);
 ```

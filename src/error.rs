@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-/// Central error type for the openai-rs client.
+/// Central error type for the openai-client-rs client.
 #[derive(Debug)]
 pub enum OpenAiError {
     /// Configuration problem (missing api key, invalid base_url, etc.)

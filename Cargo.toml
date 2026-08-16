@@ -1,16 +1,16 @@
 [package]
 name = "openai-client-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.70"
 description = "Full-featured Rust client for the OpenAI API — Chat, Images, Audio, Files, Embeddings, Models, streaming SSE, auto-retry, token counting. Compatible with OpenAI, DeepSeek, Kimi, MiniMax, Ollama."
 license = "Apache-2.0"
-repository = "https://github.com/xiefujin/openai-rs"
-homepage = "https://github.com/xiefujin/openai-rs"
+repository = "https://github.com/kandada/openai-rs"
+homepage = "https://github.com/kandada/openai-rs"
 documentation = "https://docs.rs/openai-client-rs"
 readme = "README.md"
 authors = ["xiefujin <490021684@qq.com>"]
-keywords = ["openai", "llm", "chat", "api", "sse", "async", "dall-e", "whisper", "tts", "embeddings", "gpt", "deepseek"]
+keywords = ["openai", "llm", "chat", "api", "ai"]
 categories = ["api-bindings", "web-programming::http-client", "asynchronous"]
 
 [workspace]
