@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api_common::truncate;
 use crate::client::OpenAiClient;
 use crate::error::{OpenAiError, Result};
 use crate::types::ModelInfo;
@@ -29,7 +30,7 @@ impl OpenAiClient {
             Ok(r) => Ok(r.into_json()?),
             Err(ureq::Error::Status(code, r)) => {
                 let msg = r.into_string().unwrap_or_default();
-                Err(OpenAiError::Api(format!("HTTP {code}: {msg}")))
+                Err(OpenAiError::api(code, None, truncate(&msg, 500)))
             }
             Err(e) => Err(OpenAiError::Network(e.to_string())),
         }
@@ -46,7 +47,7 @@ impl OpenAiClient {
             Ok(r) => Ok(r.into_json()?),
             Err(ureq::Error::Status(code, r)) => {
                 let msg = r.into_string().unwrap_or_default();
-                Err(OpenAiError::Api(format!("HTTP {code}: {msg}")))
+                Err(OpenAiError::api(code, None, truncate(&msg, 500)))
             }
             Err(e) => Err(OpenAiError::Network(e.to_string())),
         }
@@ -63,7 +64,7 @@ impl OpenAiClient {
             Ok(r) => Ok(r.into_json()?),
             Err(ureq::Error::Status(code, r)) => {
                 let msg = r.into_string().unwrap_or_default();
-                Err(OpenAiError::Api(format!("HTTP {code}: {msg}")))
+                Err(OpenAiError::api(code, None, truncate(&msg, 500)))
             }
             Err(e) => Err(OpenAiError::Network(e.to_string())),
         }

@@ -228,7 +228,9 @@ fn test_request_builder_max_completion_tokens_priority() {
         .max_tokens(500)
         .max_completion_tokens(2000);
     let body = req.build_body();
-    assert_eq!(body["max_tokens"], 2000);
+    // max_completion_tokens wins and max_tokens is omitted (OpenAI rule).
+    assert_eq!(body["max_completion_tokens"], 2000);
+    assert!(body.get("max_tokens").is_none());
 }
 
 #[test]
@@ -353,8 +355,8 @@ fn test_sse_parse_in_stream_error() {
         |_| {}, |_, _| {}, &cancel,
     );
     assert!(r.is_err());
-    if let Err(OpenAiError::Api(msg)) = r {
-        assert!(msg.contains("rate limit"));
+    if let Err(OpenAiError::Api(e)) = r {
+        assert!(e.message.contains("rate limit"));
     } else {
         panic!("expected Api error");
     }
@@ -365,9 +367,9 @@ fn test_sse_parse_in_stream_error() {
 #[test]
 fn test_error_retryable() {
     assert!(OpenAiError::Network("timeout".into()).is_retryable());
-    assert!(OpenAiError::Api("HTTP 503 Service Unavailable".into()).is_retryable());
-    assert!(OpenAiError::Api("rate limit exceeded".into()).is_retryable());
-    assert!(!OpenAiError::Api("HTTP 401 Unauthorized".into()).is_retryable());
+    assert!(OpenAiError::api(503, None, "Service Unavailable").is_retryable());
+    assert!(OpenAiError::stream_error("rate limit exceeded").is_retryable());
+    assert!(!OpenAiError::api(401, None, "Unauthorized").is_retryable());
     assert!(!OpenAiError::Config("no API key".into()).is_retryable());
     assert!(!OpenAiError::Cancelled.is_retryable());
 }

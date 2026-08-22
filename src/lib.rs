@@ -14,9 +14,11 @@
 //! - **Chat Completions** — full API with streaming SSE
 //! - **Models** / **Embeddings** / **Images** / **Audio** / **Files**
 //! - **Tool calling** — function calling with fragmented argument accumulation
-//! - **Reasoning** — `reasoning_content` (DeepSeek / Kimi thinking)
+//! - **Reasoning** — thinking extraction from `reasoning_content` /
+//!   `reasoning` / `thinking` fields and inline `<think>...</think>` tags
+//!   (DeepSeek / Kimi / Qwen and other providers)
 //! - **Vision** — image URL and base64 inputs
-//! - **Auto-retry** — exponential backoff with jitter
+//! - **Auto-retry** — exponential backoff with jitter and `Retry-After` support
 //! - **Token counting** — approximate message token estimation
 //! - **Multi-provider** — OpenAI, DeepSeek, Kimi, MiniMax, Ollama
 //!
@@ -44,6 +46,7 @@ pub mod tokens;
 pub mod images;
 pub mod audio;
 pub mod files;
+pub mod thinking;
 
 mod client;
 mod chat;
@@ -54,7 +57,7 @@ pub mod async_sse;
 #[cfg(feature = "async")]
 mod async_client;
 #[cfg(feature = "async")]
-mod async_chat;
+pub mod async_chat;
 #[cfg(feature = "async")]
 mod async_models;
 #[cfg(feature = "async")]
@@ -63,12 +66,12 @@ mod async_embeddings;
 pub use client::OpenAiClient;
 #[cfg(feature = "async")]
 pub use async_client::OpenAiAsyncClient;
-pub use error::{OpenAiError, Result};
+pub use error::{OpenAiError, ApiError, Result};
 pub use types::{
     ChatCompletion, ChatCompletionChoice, ChatCompletionChunk,
-    ChatMessage, ChatMessageContent, ContentPart, EmbeddingResponse,
-    FunctionCall, ImageUrl, LlmResponse, ModelInfo, SimplifiedToolCall,
-    Tool, ToolCall, ToolChoice, ToolFunction, Usage,
+    ChatCompletionTokenLogprob, ChatMessage, ChatMessageContent, ChoiceLogprobs,
+    ContentPart, EmbeddingResponse, FunctionCall, ImageUrl, LlmResponse, ModelInfo,
+    SimplifiedToolCall, Tool, ToolCall, ToolChoice, ToolFunction, TopLogprob, Usage,
 };
 pub use models::ModelList;
 pub use request::{ChatCompletionRequest, ResponseFormat, StreamOptions, JsonSchemaObject};
@@ -76,4 +79,4 @@ pub use retry::RetryConfig;
 pub use images::{ImageRequest, ImageResponse, ImageData};
 pub use audio::{SpeechRequest, TranscriptionRequest, TranscriptionResponse};
 pub use files::{FileObject, FileList};
-pub use chat::parse_openai_stream;
+pub use chat::{parse_openai_stream, ChatChunkStream};

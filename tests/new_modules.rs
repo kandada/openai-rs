@@ -3,7 +3,6 @@
 
 //! Integration tests for new openai-client-rs modules: retry, tokens, images, audio, files.
 
-use serde_json::json;
 use openai_client_rs::*;
 
 // ── Retry ──────────────────────────────────────────────────────────────────

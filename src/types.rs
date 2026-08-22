@@ -350,7 +350,37 @@ pub struct ChatCompletionChoice {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub logprobs: Option<Value>,
+    pub logprobs: Option<ChoiceLogprobs>,
+}
+
+/// Token logprob information (requested via `logprobs: true`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChoiceLogprobs {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub content: Option<Vec<ChatCompletionTokenLogprob>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub refusal: Option<Vec<ChatCompletionTokenLogprob>>,
+}
+
+/// Logprob details for a single token.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionTokenLogprob {
+    pub token: String,
+    pub logprob: f64,
+    /// Byte offsets into the raw content for the token.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bytes: Option<Vec<i64>>,
+    #[serde(default)]
+    pub top_logprobs: Vec<TopLogprob>,
+}
+
+/// A competing token candidate with its logprob.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopLogprob {
+    pub token: String,
+    pub logprob: f64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bytes: Option<Vec<i64>>,
 }
 
 /// The message inside a chat completion choice.
@@ -363,8 +393,15 @@ pub struct ChatCompletionMessage {
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub refusal: Option<String>,
+    /// DeepSeek / Kimi convention for reasoning tokens (non-streaming).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub reasoning_content: Option<String>,
+    /// Alternate private-provider reasoning field (non-streaming).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub reasoning: Option<String>,
+    /// Another private-provider reasoning field (non-streaming).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub thinking: Option<String>,
 }
 
 /// A streaming delta chunk.
@@ -387,6 +424,8 @@ pub struct ChatCompletionChunkChoice {
     pub delta: ChatCompletionDelta,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logprobs: Option<ChoiceLogprobs>,
 }
 
 /// The delta in a streaming chunk.
@@ -521,6 +560,9 @@ pub struct LlmResponse {
     pub tool_calls: Vec<SimplifiedToolCall>,
     pub reasoning_content: Option<String>,
     pub finish_reason: Option<String>,
+    /// Token usage. Populated from `stream_options.include_usage` chunks
+    /// (streaming) or the response `usage` field (non-streaming).
+    pub usage: Option<Usage>,
     /// Full raw ChatCompletion for non-streaming calls.
     pub raw: Option<ChatCompletion>,
 }

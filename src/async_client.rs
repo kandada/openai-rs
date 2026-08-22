@@ -5,8 +5,19 @@
 
 use std::time::Duration;
 
-use crate::api_common::truncate;
+use crate::api_common::{truncate, ChatBodyOptions};
 use crate::error::{OpenAiError, Result};
+use crate::retry::RetryConfig;
+
+fn build_http_client(timeout_secs: u64, proxy: Option<&str>) -> reqwest::Client {
+    let mut b = reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .connect_timeout(Duration::from_secs(10));
+    if let Some(p) = proxy {
+        b = b.proxy(reqwest::Proxy::all(p).expect("invalid proxy URL"));
+    }
+    b.build().expect("failed to build reqwest client")
+}
 
 /// An async OpenAI-compatible API client using `reqwest`.
 pub struct OpenAiAsyncClient {
@@ -17,6 +28,11 @@ pub struct OpenAiAsyncClient {
     pub(crate) organization: Option<String>,
     pub(crate) default_max_tokens: u64,
     pub(crate) temperature: Option<f64>,
+    reasoning_effort: Option<String>,
+    max_completion_tokens: Option<u64>,
+    include_usage: bool,
+    retry_config: RetryConfig,
+    proxy: Option<String>,
 }
 
 impl OpenAiAsyncClient {
@@ -27,14 +43,15 @@ impl OpenAiAsyncClient {
             base_url: Self::detect_base_url(&api_key),
             api_key,
             model: model.into(),
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(300))
-                .connect_timeout(Duration::from_secs(10))
-                .build()
-                .expect("failed to build reqwest client"),
+            client: build_http_client(300, None),
             organization: None,
             default_max_tokens: 4096,
             temperature: None,
+            reasoning_effort: None,
+            max_completion_tokens: None,
+            include_usage: false,
+            retry_config: RetryConfig::default(),
+            proxy: None,
         }
     }
 
@@ -48,15 +65,23 @@ impl OpenAiAsyncClient {
             api_key: api_key.into(),
             model: model.into(),
             base_url: base_url.into(),
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(300))
-                .connect_timeout(Duration::from_secs(10))
-                .build()
-                .expect("failed to build reqwest client"),
+            client: build_http_client(300, None),
             organization: None,
             default_max_tokens: 4096,
             temperature: None,
+            reasoning_effort: None,
+            max_completion_tokens: None,
+            include_usage: false,
+            retry_config: RetryConfig::default(),
+            proxy: None,
         }
+    }
+
+    /// Route requests through an HTTP proxy.
+    pub fn with_proxy(mut self, proxy: impl Into<String>) -> Self {
+        self.proxy = Some(proxy.into());
+        self.client = build_http_client(300, self.proxy.as_deref());
+        self
     }
 
     /// Set the organization header.
@@ -77,13 +102,39 @@ impl OpenAiAsyncClient {
         self
     }
 
+    /// Set `reasoning_effort` for reasoning models.
+    pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
+        self.reasoning_effort = Some(effort.into());
+        self
+    }
+
+    /// Override `max_tokens` with `max_completion_tokens`.
+    pub fn with_max_completion_tokens(mut self, tokens: u64) -> Self {
+        self.max_completion_tokens = Some(tokens);
+        self
+    }
+
+    /// Ask the server to include token usage in the final stream chunk.
+    pub fn with_include_usage(mut self, enable: bool) -> Self {
+        self.include_usage = enable;
+        self
+    }
+
+    /// Set the maximum number of automatic retries (0 disables retry).
+    pub fn with_retries(mut self, max_retries: u32) -> Self {
+        self.retry_config.max_retries = max_retries;
+        self
+    }
+
+    /// Set a full retry configuration.
+    pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
+        self.retry_config = config;
+        self
+    }
+
     /// Override the request timeout.
     pub fn with_timeout(mut self, secs: u64) -> Self {
-        self.client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(secs))
-            .connect_timeout(Duration::from_secs(10))
-            .build()
-            .expect("failed to build reqwest client");
+        self.client = build_http_client(secs, self.proxy.as_deref());
         self
     }
 
@@ -103,6 +154,14 @@ impl OpenAiAsyncClient {
         self.default_max_tokens
     }
 
+    pub(crate) fn chat_body_options(&self) -> ChatBodyOptions {
+        ChatBodyOptions {
+            reasoning_effort: self.reasoning_effort.clone(),
+            max_completion_tokens: self.max_completion_tokens,
+            include_usage: self.include_usage,
+        }
+    }
+
     pub(crate) fn endpoint(&self, path: &str) -> String {
         format!("{}/{path}", self.base_url.trim_end_matches('/'))
     }
@@ -118,6 +177,27 @@ impl OpenAiAsyncClient {
     }
 
     pub(crate) async fn post(&self, path: &str, body: serde_json::Value) -> Result<reqwest::Response> {
+        let cfg = &self.retry_config;
+        let mut attempt = 0u32;
+        loop {
+            match self.post_once(path, &body).await {
+                Ok(r) => return Ok(r),
+                Err(e) => {
+                    if attempt >= cfg.max_retries || !e.is_retryable() {
+                        return Err(e);
+                    }
+                    let delay = match e.retry_after_secs() {
+                        Some(secs) => Duration::from_secs(secs),
+                        None => Duration::from_millis(cfg.delay_ms(attempt)),
+                    };
+                    attempt += 1;
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+    }
+
+    async fn post_once(&self, path: &str, body: &serde_json::Value) -> Result<reqwest::Response> {
         let mut req = self
             .client
             .post(self.endpoint(path))
@@ -126,18 +206,44 @@ impl OpenAiAsyncClient {
         if let Some(ref org) = self.organization {
             req = req.header("OpenAI-Organization", org);
         }
-        let resp = req.json(&body).send().await.map_err(|e| {
+        let resp = req.json(body).send().await.map_err(|e| {
             OpenAiError::Network(e.to_string())
         })?;
         if !resp.status().is_success() {
             let code = resp.status().as_u16();
+            let retry_after = resp
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.trim().parse::<u64>().ok());
             let msg = resp.text().await.unwrap_or_default();
-            return Err(OpenAiError::Api(format!("HTTP {code}: {}", truncate(&msg, 500))));
+            return Err(OpenAiError::api(code, retry_after, truncate(&msg, 500)));
         }
         Ok(resp)
     }
 
     pub(crate) async fn post_stream(&self, path: &str, body: serde_json::Value) -> Result<reqwest::Response> {
+        let cfg = &self.retry_config;
+        let mut attempt = 0u32;
+        loop {
+            match self.post_stream_once(path, &body).await {
+                Ok(r) => return Ok(r),
+                Err(e) => {
+                    if attempt >= cfg.max_retries || !e.is_retryable() {
+                        return Err(e);
+                    }
+                    let delay = match e.retry_after_secs() {
+                        Some(secs) => Duration::from_secs(secs),
+                        None => Duration::from_millis(cfg.delay_ms(attempt)),
+                    };
+                    attempt += 1;
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
+    }
+
+    async fn post_stream_once(&self, path: &str, body: &serde_json::Value) -> Result<reqwest::Response> {
         let mut req = self
             .client
             .post(self.endpoint(path))
@@ -147,13 +253,18 @@ impl OpenAiAsyncClient {
         if let Some(ref org) = self.organization {
             req = req.header("OpenAI-Organization", org);
         }
-        let resp = req.json(&body).send().await.map_err(|e| {
+        let resp = req.json(body).send().await.map_err(|e| {
             OpenAiError::Network(e.to_string())
         })?;
         if !resp.status().is_success() {
             let code = resp.status().as_u16();
+            let retry_after = resp
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.trim().parse::<u64>().ok());
             let msg = resp.text().await.unwrap_or_default();
-            return Err(OpenAiError::Api(format!("HTTP {code}: {}", truncate(&msg, 500))));
+            return Err(OpenAiError::api(code, retry_after, truncate(&msg, 500)));
         }
         Ok(resp)
     }

@@ -36,8 +36,14 @@ impl RetryConfig {
     }
 
     /// Compute delay for attempt `n` (0-indexed) with jitter.
+    ///
+    /// Delay grows exponentially as `base_delay_ms * 2^attempt` up to
+    /// `max_delay_ms`, then a ±25% jitter is applied. Uses saturating
+    /// arithmetic so large attempt counts can never overflow.
     pub fn delay_ms(&self, attempt: u32) -> u64 {
-        let base = self.base_delay_ms * 2u64.pow(attempt);
+        // Cap the exponent so the shift is always well-defined.
+        let exp = attempt.min(30);
+        let base = self.base_delay_ms.saturating_mul(1u64 << exp);
         let capped = base.min(self.max_delay_ms);
         // Add jitter: ±25%
         let jitter = (capped as f64 * 0.25 * (rand_f64() * 2.0 - 1.0)) as u64;
@@ -50,19 +56,38 @@ impl RetryConfig {
         thread::sleep(Duration::from_millis(ms));
     }
 
+    /// Sleep for a caller-supplied delay (e.g. from a `Retry-After` header).
+    pub fn sleep_for(&self, delay: Duration) {
+        thread::sleep(delay);
+    }
+
     /// Return a future that sleeps (async version).
     #[cfg(feature = "async")]
     pub async fn async_sleep(&self, attempt: u32) {
         let ms = self.delay_ms(attempt);
         tokio::time::sleep(Duration::from_millis(ms)).await;
     }
+
+    /// Return a future that sleeps for a caller-supplied delay (async).
+    #[cfg(feature = "async")]
+    pub async fn async_sleep_for(&self, delay: Duration) {
+        tokio::time::sleep(delay).await;
+    }
 }
 
+/// Deterministic-ish random value in [0, 1).
+///
+/// `RandomState::new()` seeds a fresh hasher from the OS each call, so the
+/// result is effectively random without pulling in a `rand` dependency.
+/// A monotonic counter is folded in so consecutive calls within a process
+/// never produce identical streams.
 fn rand_f64() -> f64 {
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut h = RandomState::new().build_hasher();
-    h.write_u64(1); // simple seed
+    h.write_u64(n);
     (h.finish() as f64) / (u64::MAX as f64)
 }
 
@@ -132,6 +157,14 @@ mod tests {
         for i in 5..10 {
             assert!(config.delay_ms(i) <= 5000 + 1250, "delay should be capped");
         }
+    }
+
+    #[test]
+    fn test_delay_never_overflows_for_huge_attempt() {
+        let config = RetryConfig::default();
+        // u32::MAX attempts must not panic or overflow.
+        let d = config.delay_ms(u32::MAX);
+        assert!(d <= config.max_delay_ms * 2);
     }
 
     #[test]

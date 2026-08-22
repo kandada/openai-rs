@@ -31,6 +31,17 @@ pub struct ChatCompletionRequest {
     pub response_format: Option<ResponseFormat>,
     pub stream_options: Option<StreamOptions>,
     pub reasoning_effort: Option<String>,
+    /// Include per-token log probabilities (`logprobs`).
+    pub logprobs: Option<bool>,
+    /// Number of most likely tokens to return at each token position
+    /// (1–20, requires `logprobs: true`).
+    pub top_logprobs: Option<i32>,
+    /// Adjusts the likelihood of specific tokens (token-id → bias).
+    pub logit_bias: Option<Value>,
+    /// Whether to store the request/response (OpenAI server-side storage).
+    pub store: Option<bool>,
+    /// Service tier override (`auto`, `default`, `flex`).
+    pub service_tier: Option<String>,
     pub user: Option<String>,
 }
 
@@ -99,6 +110,11 @@ impl Default for ChatCompletionRequest {
             response_format: None,
             stream_options: None,
             reasoning_effort: None,
+            logprobs: None,
+            top_logprobs: None,
+            logit_bias: None,
+            store: None,
+            service_tier: None,
             user: None,
         }
     }
@@ -129,6 +145,11 @@ impl ChatCompletionRequest {
     pub fn response_format(mut self, v: ResponseFormat) -> Self { self.response_format = Some(v); self }
     pub fn stream_options(mut self, v: StreamOptions) -> Self { self.stream_options = Some(v); self }
     pub fn reasoning_effort(mut self, v: impl Into<String>) -> Self { self.reasoning_effort = Some(v.into()); self }
+    pub fn logprobs(mut self, v: bool) -> Self { self.logprobs = Some(v); self }
+    pub fn top_logprobs(mut self, v: i32) -> Self { self.top_logprobs = Some(v); self }
+    pub fn logit_bias(mut self, v: Value) -> Self { self.logit_bias = Some(v); self }
+    pub fn store(mut self, v: bool) -> Self { self.store = Some(v); self }
+    pub fn service_tier(mut self, v: impl Into<String>) -> Self { self.service_tier = Some(v.into()); self }
     pub fn user(mut self, v: impl Into<String>) -> Self { self.user = Some(v.into()); self }
 
     /// Build the JSON body for this request.
@@ -139,16 +160,20 @@ impl ChatCompletionRequest {
         } else {
             self.temperature.unwrap_or(1.0)
         };
-        let max_tokens = self.max_completion_tokens.or(self.max_tokens).unwrap_or(4096);
 
         let msgs = super::api_common::build_messages_json(&self.messages);
         let mut body = json!({
             "model": self.model,
             "messages": msgs,
             "temperature": temperature,
-            "max_tokens": max_tokens,
             "stream": self.stream,
         });
+        // OpenAI requires sending only one of max_tokens / max_completion_tokens.
+        if let Some(mct) = self.max_completion_tokens {
+            body["max_completion_tokens"] = json!(mct);
+        } else {
+            body["max_tokens"] = json!(self.max_tokens.unwrap_or(4096));
+        }
 
         if let Some(v) = self.top_p { body["top_p"] = json!(v); }
         if let Some(v) = self.n { body["n"] = json!(v); }
@@ -165,6 +190,11 @@ impl ChatCompletionRequest {
         if let Some(ref v) = self.response_format { body["response_format"] = serde_json::to_value(v).unwrap_or_default(); }
         if let Some(ref v) = self.stream_options { body["stream_options"] = serde_json::to_value(v).unwrap_or_default(); }
         if let Some(ref v) = self.reasoning_effort { body["reasoning_effort"] = json!(v); }
+        if let Some(v) = self.logprobs { body["logprobs"] = json!(v); }
+        if let Some(v) = self.top_logprobs { body["top_logprobs"] = json!(v); }
+        if let Some(ref v) = self.logit_bias { body["logit_bias"] = v.clone(); }
+        if let Some(v) = self.store { body["store"] = json!(v); }
+        if let Some(ref v) = self.service_tier { body["service_tier"] = json!(v); }
         if let Some(ref v) = self.user { body["user"] = json!(v); }
 
         body
@@ -252,6 +282,22 @@ mod tests {
     }
 
     #[test]
+    fn test_logprobs_and_related_params() {
+        let body = ChatCompletionRequest::new("gpt-4o", make_messages())
+            .logprobs(true)
+            .top_logprobs(5)
+            .logit_bias(serde_json::json!({"12345": -100}))
+            .store(false)
+            .service_tier("flex")
+            .build_body();
+        assert_eq!(body["logprobs"], true);
+        assert_eq!(body["top_logprobs"], 5);
+        assert_eq!(body["logit_bias"]["12345"], -100);
+        assert_eq!(body["store"], false);
+        assert_eq!(body["service_tier"], "flex");
+    }
+
+    #[test]
     fn test_kimi_forces_temp_1() {
         let body = ChatCompletionRequest::new("kimi-k2", make_messages())
             .temperature(0.1)
@@ -265,7 +311,8 @@ mod tests {
             .max_tokens(1000)
             .max_completion_tokens(2000)
             .build_body();
-        assert_eq!(body["max_tokens"], 2000);
+        assert_eq!(body["max_completion_tokens"], 2000);
+        assert!(body.get("max_tokens").is_none());
     }
 
     #[test]

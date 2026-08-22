@@ -7,15 +7,45 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::client::OpenAiClient;
 use crate::error::{OpenAiError, Result};
 use crate::request::ChatCompletionRequest;
 use crate::sse::SseReader;
+use crate::thinking::{self, ThinkTagParser};
 use crate::types::{
-    ChatCompletion, ChatMessage, LlmResponse, SimplifiedToolCall, Tool,
+    ChatCompletion, ChatCompletionChunk, ChatMessage, LlmResponse, SimplifiedToolCall, Tool, Usage,
 };
+
+/// Iterator over raw, typed [`ChatCompletionChunk`]s from a streamed response.
+///
+/// Stops at `data: [DONE]` / EOF. This is the convenience "typed stream"
+/// counterpart to the callback-based [`OpenAiClient::chat_stream`].
+pub struct ChatChunkStream<R: Read> {
+    sse: SseReader<R>,
+}
+
+impl<R: Read> ChatChunkStream<R> {
+    pub fn new(reader: R) -> Self {
+        ChatChunkStream { sse: SseReader::new(reader) }
+    }
+}
+
+impl<R: Read> Iterator for ChatChunkStream<R> {
+    type Item = std::result::Result<ChatCompletionChunk, OpenAiError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.sse.next_data() {
+            Ok(Some(payload)) => Some(match serde_json::from_str(&payload) {
+                Ok(chunk) => Ok(chunk),
+                Err(e) => Err(OpenAiError::Json(e.to_string())),
+            }),
+            Ok(None) => None,
+            Err(e) => Some(Err(OpenAiError::Network(format!("SSE read error: {e}")))),
+        }
+    }
+}
 
 /// Accumulator for one streamed tool_call (fragments arrive by index).
 #[derive(Default, Clone)]
@@ -39,7 +69,7 @@ impl OpenAiClient {
         let body = self.build_chat_body(messages, tools, false, None);
         let resp = self.post("chat/completions", body)?;
         let raw: ChatCompletion = resp.into_json()?;
-        Ok(self.assemble_response(&raw))
+        Ok(crate::api_common::assemble_response(&raw))
     }
 
     /// Create a chat completion and return the raw JSON response.
@@ -103,6 +133,17 @@ impl OpenAiClient {
         parse_openai_stream(reader, on_delta, on_tool_call, &cancel)
     }
 
+    /// Stream and return raw typed [`ChatCompletionChunk`]s.
+    pub fn chat_stream_chunks(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[Tool]>,
+    ) -> Result<ChatChunkStream<Box<dyn Read>>> {
+        let body = self.build_chat_body(messages, tools, true, None);
+        let reader = self.post_stream("chat/completions", body)?;
+        Ok(ChatChunkStream::new(Box::new(reader) as Box<dyn Read>))
+    }
+
     // ── Internal helpers ───────────────────────────────────────────────────
 
     fn build_chat_body(
@@ -113,113 +154,20 @@ impl OpenAiClient {
         max_tokens_override: Option<u64>,
     ) -> Value {
         let max_tokens = max_tokens_override.unwrap_or(self.default_max_tokens());
-
-        // Kimi models only accept temperature = 1.
-        let model_lower = self.model().to_lowercase();
-        let temperature = if model_lower.contains("kimi") || model_lower.contains("moonshot") {
-            1.0
-        } else {
-            self.temperature()
-                .unwrap_or(0.7)
-        };
-
-        let msgs = Self::build_messages_json(messages);
-        let mut body = json!({
-            "model": self.model(),
-            "messages": msgs,
-            "max_tokens": max_tokens,
-            "stream": stream,
-        });
-
-        body["temperature"] = json!(temperature);
-
-        if let Some(tools) = tools {
-            if !tools.is_empty() {
-                let arr: Vec<Value> = tools.iter().map(|t| serde_json::to_value(t).unwrap_or_default()).collect();
-                body["tools"] = Value::Array(arr);
-                body["tool_choice"] = json!("auto");
-            }
-        }
-
-        body
+        crate::api_common::build_chat_body(
+            self.model(),
+            messages,
+            tools,
+            stream,
+            max_tokens,
+            self.temperature(),
+            &self.chat_body_options(),
+        )
     }
 
+    #[cfg(test)]
     fn build_messages_json(messages: &[ChatMessage]) -> Vec<Value> {
-        let mut out = Vec::with_capacity(messages.len());
-        for m in messages {
-            let mut obj = json!({ "role": m.role });
-            let map = obj.as_object_mut().unwrap();
-
-            // Handle content_parts (multimodal) vs plain content.
-            if let Some(ref parts) = m.content_parts {
-                map.insert("content".into(), serde_json::to_value(parts).unwrap_or_default());
-            } else {
-                map.insert("content".into(), Value::String(m.content.clone()));
-            }
-
-            if let Some(tcs) = &m.tool_calls {
-                let arr: Vec<Value> = tcs
-                    .iter()
-                    .map(|tc| {
-                        json!({
-                            "id": tc.id,
-                            "type": tc.call_type,
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments,
-                            }
-                        })
-                    })
-                    .collect();
-                map.insert("tool_calls".into(), Value::Array(arr));
-            }
-
-            if let Some(id) = &m.tool_call_id {
-                map.insert("tool_call_id".into(), Value::String(id.clone()));
-            }
-            if let Some(name) = &m.name {
-                map.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(rc) = &m.reasoning_content {
-                map.insert("reasoning_content".into(), Value::String(rc.clone()));
-            }
-            out.push(obj);
-        }
-        out
-    }
-
-    fn assemble_response(&self, raw: &ChatCompletion) -> LlmResponse {
-        let mut text = String::new();
-        let mut tool_calls: Vec<SimplifiedToolCall> = Vec::new();
-        let mut reasoning: Option<String> = None;
-        let mut finish_reason: Option<String> = None;
-
-        if let Some(choice) = raw.choices.first() {
-            if let Some(ref content) = choice.message.content {
-                text.push_str(content);
-            }
-            finish_reason = choice.finish_reason.clone();
-            if let Some(ref rc) = choice.message.reasoning_content {
-                reasoning = Some(rc.clone());
-            }
-            if let Some(ref tcs) = choice.message.tool_calls {
-                for tc in tcs {
-                    tool_calls.push(SimplifiedToolCall {
-                        id: tc.id.clone(),
-                        name: tc.function.name.clone(),
-                        arguments: tc.function.arguments.clone(),
-                    });
-                }
-            }
-        }
-
-        LlmResponse {
-            text,
-            tool_calls,
-            reasoning_content: reasoning,
-            finish_reason,
-            raw: Some(raw.clone()),
-        }
+        crate::api_common::build_messages_json(messages)
     }
 
     // ── Request-builder API ───────────────────────────────────────────────
@@ -256,8 +204,10 @@ pub fn parse_openai_stream<R: Read>(
     let mut sse = SseReader::new(reader);
     let mut text = String::new();
     let mut reasoning = String::new();
+    let mut tag_parser = ThinkTagParser::default();
     let mut tool_accs: BTreeMap<i64, ToolAcc> = BTreeMap::new();
     let mut finish_reason: Option<String> = None;
+    let mut usage: Option<Usage> = None;
     let mut valid_chunks: usize = 0;
     let mut total_payloads: usize = 0;
 
@@ -285,7 +235,13 @@ pub fn parse_openai_stream<R: Read>(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| err.to_string());
-            return Err(OpenAiError::Api(format!("stream error: {msg}")));
+            return Err(OpenAiError::stream_error(format!("stream error: {msg}")));
+        }
+
+        // Final usage chunk (arrives when stream_options.include_usage=true)
+        // has `choices: []` and a top-level `usage`.
+        if let Some(u) = chunk.get("usage").and_then(|u| serde_json::from_value(u.clone()).ok()) {
+            usage = Some(u);
         }
 
         let choice = match chunk.get("choices").and_then(|c| c.get(0)) {
@@ -302,24 +258,16 @@ pub fn parse_openai_stream<R: Read>(
             None => continue,
         };
 
-        // reasoning_content (thinking)
-        let rc_opt = delta
-            .get("reasoning_content")
-            .and_then(|v| v.as_str())
-            .or_else(|| delta.get("reasoning").and_then(|v| v.as_str()));
-        if let Some(rc) = rc_opt {
-            if !rc.is_empty() {
-                reasoning.push_str(rc);
-                on_delta(rc);
-            }
+        // Thinking extraction: field strategies take priority over inline
+        // `<think>...</think>` tags (which survive chunk boundaries).
+        let (think_chunk, content_chunk) = thinking::extract_thinking(delta, &mut tag_parser);
+        if !think_chunk.is_empty() {
+            reasoning.push_str(&think_chunk);
+            on_delta(&think_chunk);
         }
-
-        // content
-        if let Some(c) = delta.get("content").and_then(|v| v.as_str()) {
-            if !c.is_empty() {
-                text.push_str(c);
-                on_delta(c);
-            }
+        if !content_chunk.is_empty() {
+            text.push_str(&content_chunk);
+            on_delta(&content_chunk);
         }
 
         // tool_calls fragments
@@ -348,10 +296,19 @@ pub fn parse_openai_stream<R: Read>(
         }
     }
 
+    // Flush any cross-chunk residue from the <think> tag parser.
+    let (tail_think, tail_content) = tag_parser.flush();
+    if !tail_think.is_empty() {
+        reasoning.push_str(&tail_think);
+    }
+    if !tail_content.is_empty() {
+        text.push_str(&tail_content);
+    }
+
     // If the stream produced SSE payloads but NONE were parseable JSON.
     if total_payloads > 0 && valid_chunks == 0 {
-        return Err(OpenAiError::Api(
-            "stream returned no parseable data (all chunks malformed)".into(),
+        return Err(OpenAiError::stream_error(
+            "stream returned no parseable data (all chunks malformed)",
         ));
     }
 
@@ -390,6 +347,7 @@ pub fn parse_openai_stream<R: Read>(
             Some(reasoning)
         },
         finish_reason,
+        usage,
         raw: None,
     })
 }
@@ -465,6 +423,66 @@ mod tests {
         .unwrap();
         assert_eq!(resp.text, "answer");
         assert_eq!(resp.reasoning_content.as_deref(), Some("think"));
+    }
+
+    #[test]
+    fn stream_recognizes_thinking_field() {
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"thinking\":\"plan X\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"do it\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let cancel = AtomicBool::new(false);
+        let resp = parse_openai_stream(
+            Cursor::new(raw.as_bytes().to_vec()),
+            |_| {},
+            |_, _| {},
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(resp.reasoning_content.as_deref(), Some("plan X"));
+        assert_eq!(resp.text, "do it");
+    }
+
+    #[test]
+    fn stream_strips_think_tags_across_chunks() {
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"<think>I am thi\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"nking</think>done\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let cancel = AtomicBool::new(false);
+        let resp = parse_openai_stream(
+            Cursor::new(raw.as_bytes().to_vec()),
+            |_| {},
+            |_, _| {},
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(resp.reasoning_content.as_deref(), Some("I am thinking"));
+        assert_eq!(resp.text, "done");
+    }
+
+    #[test]
+    fn stream_captures_usage_from_final_chunk() {
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n",
+            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let cancel = AtomicBool::new(false);
+        let resp = parse_openai_stream(
+            Cursor::new(raw.as_bytes().to_vec()),
+            |_| {},
+            |_, _| {},
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(resp.text, "hi");
+        let u = resp.usage.unwrap();
+        assert_eq!(u.prompt_tokens, 10);
+        assert_eq!(u.completion_tokens, 5);
+        assert_eq!(u.total_tokens, 15);
     }
 
     #[test]
@@ -559,5 +577,40 @@ mod tests {
         let client = OpenAiClient::new("sk-test", "kimi-k2").with_temperature(0.1);
         let body = client.build_chat_body(&[ChatMessage::user("x")], None, false, None);
         assert_eq!(body["temperature"], 1.0);
+    }
+
+    #[test]
+    fn build_body_includes_reasoning_and_usage_opts() {
+        let client = OpenAiClient::new("sk-test", "o3")
+            .with_reasoning_effort("high")
+            .with_max_completion_tokens(8000)
+            .with_include_usage(true);
+        let body = client.build_chat_body(&[ChatMessage::user("x")], None, true, None);
+        assert_eq!(body["reasoning_effort"], "high");
+        assert_eq!(body["max_completion_tokens"], 8000);
+        assert!(body.get("max_tokens").is_none());
+        assert_eq!(body["stream_options"]["include_usage"], true);
+    }
+
+    #[test]
+    fn typed_chunk_stream_yields_chunks() {
+        let raw = concat!(
+            "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n",
+            "data: {\"id\":\"c2\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let mut it = ChatChunkStream::new(Cursor::new(raw.as_bytes().to_vec()));
+        let c1 = it.next().unwrap().unwrap();
+        assert_eq!(c1.choices[0].delta.content.as_deref(), Some("hi"));
+        let c2 = it.next().unwrap().unwrap();
+        assert_eq!(c2.choices[0].finish_reason.as_deref(), Some("stop"));
+        assert!(it.next().is_none());
+    }
+
+    #[test]
+    fn typed_chunk_stream_propagates_parse_error() {
+        let raw = "data: {not json\n\ndata: [DONE]\n\n";
+        let mut it = ChatChunkStream::new(Cursor::new(raw.as_bytes().to_vec()));
+        assert!(it.next().unwrap().is_err());
     }
 }

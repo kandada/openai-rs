@@ -22,7 +22,7 @@ impl OpenAiAsyncClient {
         let status = resp.status();
         if !status.is_success() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(OpenAiError::Api(format!("HTTP {}: {}", status.as_u16(), truncate(&msg, 500))));
+            return Err(OpenAiError::api(status.as_u16(), None, truncate(&msg, 500)));
         }
         Ok(resp.json().await?)
     }
@@ -37,7 +37,7 @@ impl OpenAiAsyncClient {
         let status = resp.status();
         if !status.is_success() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(OpenAiError::Api(format!("HTTP {}: {}", status.as_u16(), truncate(&msg, 500))));
+            return Err(OpenAiError::api(status.as_u16(), None, truncate(&msg, 500)));
         }
         Ok(resp.json().await?)
     }
@@ -52,7 +52,7 @@ impl OpenAiAsyncClient {
         let status = resp.status();
         if !status.is_success() {
             let msg = resp.text().await.unwrap_or_default();
-            return Err(OpenAiError::Api(format!("HTTP {}: {}", status.as_u16(), truncate(&msg, 500))));
+            return Err(OpenAiError::api(status.as_u16(), None, truncate(&msg, 500)));
         }
         Ok(resp.json().await?)
     }
