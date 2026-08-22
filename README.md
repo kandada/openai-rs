@@ -25,16 +25,6 @@ A full-featured Rust client for the OpenAI API. Compatible with OpenAI, DeepSeek
 - **Vision** — image URL and base64 inputs
 - **Multi-Provider** — auto-detects provider by API key, custom base URL
 
-## Installation
-
-```toml
-[dependencies]
-openai-client-rs = "0.1"
-
-# With async support
-# openai-client-rs = { version = "0.1", features = ["async"] }
-```
-
 ## Quick Start
 
 ### Sync (default)

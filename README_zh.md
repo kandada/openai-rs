@@ -25,16 +25,6 @@
 - **视觉识别** — 图片 URL 与 base64 输入
 - **多提供商** — 根据 API key 自动识别，支持自定义 base URL
 
-## 安装
-
-```toml
-[dependencies]
-openai-client-rs = "0.1"
-
-# 异步支持
-# openai-client-rs = { version = "0.1", features = ["async"] }
-```
-
 ## 快速开始
 
 ### 同步
