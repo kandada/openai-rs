@@ -155,7 +155,6 @@ fn main() {
     // ── Test 2: streaming fragmented reasoning + parallel tool calls ───────
     println!("── Test 2: streaming (fragmented reasoning + tool_calls) ──");
     let mut streamed_text = String::new();
-    let mut streamed_reasoning = String::new();
     let mut streamed_tool_calls: Vec<(String, String)> = Vec::new();
     let resp = client
         .chat_stream(
@@ -172,12 +171,7 @@ fn main() {
             exit(1);
         });
     if let Some(rc) = &resp.reasoning_content {
-        streamed_reasoning.push_str(rc);
-    }
-    if !streamed_reasoning.is_empty() {
-        t.check(true, "streamed reasoning captured (field channel)");
-    } else {
-        t.note("no reasoning field emitted by model in stream");
+        println!("  streamed reasoning ({} chars)", rc.chars().count());
     }
     println!("  streamed text: {}", truncate(&streamed_text, 150));
     t.note(&format!("streamed tool calls: {} (via callback), {} (via response)", streamed_tool_calls.len(), resp.tool_calls.len()));

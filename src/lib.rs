@@ -79,4 +79,4 @@ pub use retry::RetryConfig;
 pub use images::{ImageRequest, ImageResponse, ImageData};
 pub use audio::{SpeechRequest, TranscriptionRequest, TranscriptionResponse};
 pub use files::{FileObject, FileList};
-pub use chat::{parse_openai_stream, ChatChunkStream};
+pub use chat::{parse_openai_stream, parse_openai_stream_rich, StreamHandler, ChatChunkStream};

@@ -55,6 +55,117 @@ struct ToolAcc {
     arguments: String,
 }
 
+/// Optional callbacks for streaming chat completions (builder).
+///
+/// Unlike the classic two-closure methods ([`OpenAiClient::chat_stream`],
+/// [`OpenAiClient::send_stream`]), every callback here is **optional** — build
+/// only what you need:
+///
+/// ```
+/// use openai_client_rs::StreamHandler;
+///
+/// let handler = StreamHandler::new()
+///     .on_delta(|d| { /* visible text */ })
+///     .on_thinking(|t| { /* reasoning / thinking */ })  // optional
+///     .on_tool_call(|name, args| { /* tool call */ });  // optional
+/// ```
+///
+/// Routing:
+/// - visible text deltas go to `on_delta`;
+/// - reasoning/thinking deltas go to `on_thinking` when set, otherwise they
+///   fall through to `on_delta` (so a handler registering only `on_delta`
+///   behaves exactly like the classic two-callback stream API);
+/// - completed tool calls go to `on_tool_call` when set.
+///
+/// Callbacks are boxed, so they must be `'static` — capture owned state with
+/// `move`. The returned [`LlmResponse`] always carries the accumulated
+/// `reasoning_content` regardless of which callbacks are set.
+type DeltaCallback = Box<dyn FnMut(&str)>;
+type ThinkingCallback = Box<dyn FnMut(&str)>;
+type ToolCallCallback = Box<dyn FnMut(&str, &str)>;
+
+#[derive(Default)]
+pub struct StreamHandler {
+    on_delta: Option<DeltaCallback>,
+    on_thinking: Option<ThinkingCallback>,
+    on_tool_call: Option<ToolCallCallback>,
+}
+
+impl StreamHandler {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register the callback for visible text deltas.
+    pub fn on_delta(mut self, f: impl FnMut(&str) + 'static) -> Self {
+        self.on_delta = Some(Box::new(f));
+        self
+    }
+
+    /// Register the callback for reasoning/thinking deltas.
+    ///
+    /// When unset, thinking deltas fall through to `on_delta`.
+    pub fn on_thinking(mut self, f: impl FnMut(&str) + 'static) -> Self {
+        self.on_thinking = Some(Box::new(f));
+        self
+    }
+
+    /// Register the callback for completed tool calls.
+    pub fn on_tool_call(mut self, f: impl FnMut(&str, &str) + 'static) -> Self {
+        self.on_tool_call = Some(Box::new(f));
+        self
+    }
+}
+
+/// Internal emit interface shared by the classic and rich stream parsers.
+pub(crate) trait StreamSink {
+    fn delta(&mut self, s: &str);
+    fn thinking(&mut self, s: &str);
+    fn tool_call(&mut self, name: &str, args: &str);
+}
+
+impl StreamSink for StreamHandler {
+    fn delta(&mut self, s: &str) {
+        if let Some(f) = &mut self.on_delta {
+            f(s);
+        }
+    }
+
+    fn thinking(&mut self, s: &str) {
+        if let Some(f) = &mut self.on_thinking {
+            f(s);
+        } else if let Some(f) = &mut self.on_delta {
+            f(s);
+        }
+    }
+
+    fn tool_call(&mut self, name: &str, args: &str) {
+        if let Some(f) = &mut self.on_tool_call {
+            f(name, args);
+        }
+    }
+}
+
+/// Classic two-closure sink: thinking falls through to `on_delta`.
+pub(crate) struct ClassicSink<D, TC> {
+    pub(crate) on_delta: D,
+    pub(crate) on_tool_call: TC,
+}
+
+impl<D: FnMut(&str), TC: FnMut(&str, &str)> StreamSink for ClassicSink<D, TC> {
+    fn delta(&mut self, s: &str) {
+        (self.on_delta)(s);
+    }
+
+    fn thinking(&mut self, s: &str) {
+        (self.on_delta)(s);
+    }
+
+    fn tool_call(&mut self, name: &str, args: &str) {
+        (self.on_tool_call)(name, args);
+    }
+}
+
 impl OpenAiClient {
     // ── Non-streaming chat completion ──────────────────────────────────────
 
@@ -87,8 +198,12 @@ impl OpenAiClient {
 
     /// Stream a chat completion with callbacks.
     ///
-    /// `on_delta` is called for each text/reasoning token.
-    /// `on_tool_call` is called when a tool call is completed.
+    /// `on_delta` is called for each text token **and** each reasoning/thinking
+    /// token (classic catch-all behaviour). `on_tool_call` is called when a
+    /// tool call is completed.
+    ///
+    /// To receive reasoning/thinking on a separate callback, use
+    /// [`OpenAiClient::chat_stream_rich`] with a [`StreamHandler`].
     pub fn chat_stream(
         &self,
         messages: &[ChatMessage],
@@ -100,6 +215,22 @@ impl OpenAiClient {
         let body = self.build_chat_body(messages, tools, true, None);
         let reader = self.post_stream("chat/completions", body)?;
         parse_openai_stream(reader, on_delta, on_tool_call, &cancel)
+    }
+
+    /// Stream a chat completion with an optional-callback [`StreamHandler`].
+    ///
+    /// Reasoning/thinking goes to the handler's `on_thinking` (when set) and
+    /// otherwise falls through to `on_delta`.
+    pub fn chat_stream_rich(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[Tool]>,
+        handler: StreamHandler,
+    ) -> Result<LlmResponse> {
+        let cancel = AtomicBool::new(false);
+        let body = self.build_chat_body(messages, tools, true, None);
+        let reader = self.post_stream("chat/completions", body)?;
+        parse_openai_stream_rich(reader, handler, &cancel)
     }
 
     /// Stream a chat completion with cancellation support.
@@ -114,6 +245,20 @@ impl OpenAiClient {
         let body = self.build_chat_body(messages, tools, true, None);
         let reader = self.post_stream("chat/completions", body)?;
         parse_openai_stream(reader, on_delta, on_tool_call, cancel)
+    }
+
+    /// Stream a chat completion with cancellation support and a
+    /// [`StreamHandler`].
+    pub fn chat_stream_cancellable_rich(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[Tool]>,
+        handler: StreamHandler,
+        cancel: &AtomicBool,
+    ) -> Result<LlmResponse> {
+        let body = self.build_chat_body(messages, tools, true, None);
+        let reader = self.post_stream("chat/completions", body)?;
+        parse_openai_stream_rich(reader, handler, cancel)
     }
 
     // ── Streaming with max_tokens override ─────────────────────────────────
@@ -131,6 +276,20 @@ impl OpenAiClient {
         let body = self.build_chat_body(messages, tools, true, Some(max_tokens));
         let reader = self.post_stream("chat/completions", body)?;
         parse_openai_stream(reader, on_delta, on_tool_call, &cancel)
+    }
+
+    /// Stream with explicit max_tokens and a [`StreamHandler`].
+    pub fn chat_stream_with_max_tokens_rich(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[Tool]>,
+        max_tokens: u64,
+        handler: StreamHandler,
+    ) -> Result<LlmResponse> {
+        let cancel = AtomicBool::new(false);
+        let body = self.build_chat_body(messages, tools, true, Some(max_tokens));
+        let reader = self.post_stream("chat/completions", body)?;
+        parse_openai_stream_rich(reader, handler, &cancel)
     }
 
     /// Stream and return raw typed [`ChatCompletionChunk`]s.
@@ -192,14 +351,51 @@ impl OpenAiClient {
         let reader = self.post_stream("chat/completions", body)?;
         parse_openai_stream(reader, on_delta, on_tool_call, &cancel)
     }
+
+    /// Send a `ChatCompletionRequest` (streaming) with a [`StreamHandler`].
+    pub fn send_stream_rich(
+        &self,
+        request: &ChatCompletionRequest,
+        handler: StreamHandler,
+    ) -> Result<LlmResponse> {
+        let cancel = AtomicBool::new(false);
+        let body = request.build_body();
+        let reader = self.post_stream("chat/completions", body)?;
+        parse_openai_stream_rich(reader, handler, &cancel)
+    }
 }
 
 /// Parse an OpenAI-style SSE chat stream from any reader.
+///
+/// `on_delta` receives each text token and each reasoning/thinking token
+/// (classic catch-all behaviour). Use [`parse_openai_stream_rich`] to route
+/// reasoning/thinking to a separate optional callback.
 pub fn parse_openai_stream<R: Read>(
     reader: R,
-    mut on_delta: impl FnMut(&str),
-    mut on_tool_call: impl FnMut(&str, &str),
+    on_delta: impl FnMut(&str),
+    on_tool_call: impl FnMut(&str, &str),
     cancel: &AtomicBool,
+) -> Result<LlmResponse> {
+    let mut sink = ClassicSink { on_delta, on_tool_call };
+    parse_stream_loop(reader, cancel, &mut sink)
+}
+
+/// Parse an OpenAI-style SSE chat stream with an optional-callback
+/// [`StreamHandler`].
+///
+/// See [`StreamHandler`] for callback routing rules.
+pub fn parse_openai_stream_rich<R: Read>(
+    reader: R,
+    mut handler: StreamHandler,
+    cancel: &AtomicBool,
+) -> Result<LlmResponse> {
+    parse_stream_loop(reader, cancel, &mut handler)
+}
+
+fn parse_stream_loop<R: Read>(
+    reader: R,
+    cancel: &AtomicBool,
+    sink: &mut impl StreamSink,
 ) -> Result<LlmResponse> {
     let mut sse = SseReader::new(reader);
     let mut text = String::new();
@@ -263,11 +459,11 @@ pub fn parse_openai_stream<R: Read>(
         let (think_chunk, content_chunk) = thinking::extract_thinking(delta, &mut tag_parser);
         if !think_chunk.is_empty() {
             reasoning.push_str(&think_chunk);
-            on_delta(&think_chunk);
+            sink.thinking(&think_chunk);
         }
         if !content_chunk.is_empty() {
             text.push_str(&content_chunk);
-            on_delta(&content_chunk);
+            sink.delta(&content_chunk);
         }
 
         // tool_calls fragments
@@ -323,7 +519,7 @@ pub fn parse_openai_stream<R: Read>(
         } else {
             acc.id
         };
-        on_tool_call(&acc.name, &acc.arguments);
+        sink.tool_call(&acc.name, &acc.arguments);
         tool_calls.push(SimplifiedToolCall {
             id,
             name: acc.name,
@@ -408,21 +604,55 @@ mod tests {
 
     #[test]
     fn stream_separates_reasoning_and_content() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
         let raw = concat!(
             "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"}}]}\n\n",
             "data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n",
             "data: [DONE]\n\n"
         );
         let cancel = AtomicBool::new(false);
+        let deltas = Rc::new(RefCell::new(Vec::<String>::new()));
+        let thinking = Rc::new(RefCell::new(Vec::<String>::new()));
+        let d = Rc::clone(&deltas);
+        let t = Rc::clone(&thinking);
+        let resp = parse_openai_stream_rich(
+            Cursor::new(raw.as_bytes().to_vec()),
+            StreamHandler::new()
+                .on_delta(move |s| d.borrow_mut().push(s.to_string()))
+                .on_thinking(move |s| t.borrow_mut().push(s.to_string())),
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(resp.text, "answer");
+        assert_eq!(resp.reasoning_content.as_deref(), Some("think"));
+        // `on_delta` receives ONLY content; thinking goes to `on_thinking`.
+        assert_eq!(deltas.borrow().join(""), "answer");
+        assert_eq!(thinking.borrow().join(""), "think");
+    }
+
+    #[test]
+    fn classic_stream_delta_receives_thinking() {
+        // The classic two-closure API is a catch-all: thinking falls through
+        // to `on_delta` (pre-v0.1.3 behaviour), so no reasoning is lost.
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let cancel = AtomicBool::new(false);
+        let mut deltas = Vec::new();
         let resp = parse_openai_stream(
             Cursor::new(raw.as_bytes().to_vec()),
-            |_| {},
+            |d| deltas.push(d.to_string()),
             |_, _| {},
             &cancel,
         )
         .unwrap();
         assert_eq!(resp.text, "answer");
         assert_eq!(resp.reasoning_content.as_deref(), Some("think"));
+        assert_eq!(deltas.join(""), "thinkanswer");
     }
 
     #[test]

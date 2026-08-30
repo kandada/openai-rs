@@ -439,6 +439,12 @@ pub struct ChatCompletionDelta {
     pub tool_calls: Option<Vec<ToolCallDelta>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    /// Alternate private-provider reasoning field (streaming).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub reasoning: Option<String>,
+    /// Another private-provider reasoning field (streaming), e.g. MiniMax.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub thinking: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refusal: Option<String>,
 }

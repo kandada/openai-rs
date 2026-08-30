@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::api_common::assemble_response;
 use crate::async_client::OpenAiAsyncClient;
 use crate::async_sse::AsyncSseStream;
+use crate::chat::{ClassicSink, StreamHandler, StreamSink};
 use crate::error::{OpenAiError, Result};
 use crate::request::ChatCompletionRequest;
 use crate::thinking::{self, ThinkTagParser};
@@ -78,18 +79,38 @@ impl OpenAiAsyncClient {
     }
 
     /// Stream a chat completion.
+    ///
+    /// `on_delta` receives each text token and each reasoning/thinking token
+    /// (classic catch-all behaviour). `on_tool_call` is called when a tool call
+    /// is completed. To route reasoning/thinking to a separate callback, use
+    /// [`OpenAiAsyncClient::chat_stream_rich`] with a [`StreamHandler`].
     pub async fn chat_stream(
         &self,
         messages: &[ChatMessage],
         tools: Option<&[Tool]>,
-        mut on_delta: impl FnMut(&str),
-        mut on_tool_call: impl FnMut(&str, &str),
+        on_delta: impl FnMut(&str),
+        on_tool_call: impl FnMut(&str, &str),
     ) -> Result<LlmResponse> {
         let body = self.build_chat_body(messages, tools, true, None);
         let resp = self.post_stream("chat/completions", body).await?;
         let stream = resp.bytes_stream();
         let mut sse = AsyncSseStream::new(stream);
-        parse_chat_stream(&mut sse, &mut on_delta, &mut on_tool_call).await
+        let mut sink = ClassicSink { on_delta, on_tool_call };
+        parse_chat_stream(&mut sse, &mut sink).await
+    }
+
+    /// Stream a chat completion with an optional-callback [`StreamHandler`].
+    pub async fn chat_stream_rich(
+        &self,
+        messages: &[ChatMessage],
+        tools: Option<&[Tool]>,
+        mut handler: StreamHandler,
+    ) -> Result<LlmResponse> {
+        let body = self.build_chat_body(messages, tools, true, None);
+        let resp = self.post_stream("chat/completions", body).await?;
+        let stream = resp.bytes_stream();
+        let mut sse = AsyncSseStream::new(stream);
+        parse_chat_stream(&mut sse, &mut handler).await
     }
 
     /// Send a `ChatCompletionRequest` (non-streaming).
@@ -104,14 +125,28 @@ impl OpenAiAsyncClient {
     pub async fn send_stream(
         &self,
         request: &ChatCompletionRequest,
-        mut on_delta: impl FnMut(&str),
-        mut on_tool_call: impl FnMut(&str, &str),
+        on_delta: impl FnMut(&str),
+        on_tool_call: impl FnMut(&str, &str),
     ) -> Result<LlmResponse> {
         let body = request.build_body();
         let resp = self.post_stream("chat/completions", body).await?;
         let stream = resp.bytes_stream();
         let mut sse = AsyncSseStream::new(stream);
-        parse_chat_stream(&mut sse, &mut on_delta, &mut on_tool_call).await
+        let mut sink = ClassicSink { on_delta, on_tool_call };
+        parse_chat_stream(&mut sse, &mut sink).await
+    }
+
+    /// Send a `ChatCompletionRequest` (streaming) with a [`StreamHandler`].
+    pub async fn send_stream_rich(
+        &self,
+        request: &ChatCompletionRequest,
+        mut handler: StreamHandler,
+    ) -> Result<LlmResponse> {
+        let body = request.build_body();
+        let resp = self.post_stream("chat/completions", body).await?;
+        let stream = resp.bytes_stream();
+        let mut sse = AsyncSseStream::new(stream);
+        parse_chat_stream(&mut sse, &mut handler).await
     }
 
     /// Stream and return raw typed [`ChatCompletionChunk`]s.
@@ -166,8 +201,7 @@ impl OpenAiAsyncClient {
 /// Parse an OpenAI-style async SSE stream into a LlmResponse.
 async fn parse_chat_stream<S>(
     sse: &mut AsyncSseStream<S>,
-    on_delta: &mut impl FnMut(&str),
-    on_tool_call: &mut impl FnMut(&str, &str),
+    sink: &mut impl StreamSink,
 ) -> Result<LlmResponse>
 where
     S: futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Unpin,
@@ -211,11 +245,11 @@ where
         let (think_chunk, content_chunk) = thinking::extract_thinking(delta, &mut tag_parser);
         if !think_chunk.is_empty() {
             reasoning.push_str(&think_chunk);
-            on_delta(&think_chunk);
+            sink.thinking(&think_chunk);
         }
         if !content_chunk.is_empty() {
             text.push_str(&content_chunk);
-            on_delta(&content_chunk);
+            sink.delta(&content_chunk);
         }
         if let Some(tcs) = delta.get("tool_calls").and_then(|v| v.as_array()) {
             for tc in tcs {
@@ -253,7 +287,7 @@ where
     for (i, (_, acc)) in tool_accs.into_iter().enumerate() {
         if acc.name.is_empty() { continue; }
         let id = if acc.id.is_empty() { format!("call_{i}") } else { acc.id };
-        on_tool_call(&acc.name, &acc.arguments);
+        sink.tool_call(&acc.name, &acc.arguments);
         tool_calls.push(SimplifiedToolCall {
             id,
             name: acc.name,
@@ -363,5 +397,30 @@ mod tests {
         let c2 = st.next().await.unwrap().unwrap();
         assert_eq!(c2.choices[0].finish_reason.as_deref(), Some("stop"));
         assert!(st.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn async_parse_chat_stream_rich_separates() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let raw = concat!(
+            "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"think\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let mut sse = AsyncSseStream::new(make_sse_stream(raw));
+        let deltas = Rc::new(RefCell::new(Vec::<String>::new()));
+        let thinking = Rc::new(RefCell::new(Vec::<String>::new()));
+        let d = Rc::clone(&deltas);
+        let t = Rc::clone(&thinking);
+        let mut handler = StreamHandler::new()
+            .on_delta(move |s| d.borrow_mut().push(s.to_string()))
+            .on_thinking(move |s| t.borrow_mut().push(s.to_string()));
+        let resp = parse_chat_stream(&mut sse, &mut handler).await.unwrap();
+        assert_eq!(resp.text, "answer");
+        assert_eq!(resp.reasoning_content.as_deref(), Some("think"));
+        assert_eq!(deltas.borrow().join(""), "answer");
+        assert_eq!(thinking.borrow().join(""), "think");
     }
 }

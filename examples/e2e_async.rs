@@ -159,7 +159,6 @@ async fn main() {
     // ── Test 2: async streaming reasoning + fragmented tool calls ──────────
     println!("── Test 2: async streaming (reasoning + tool_calls) ──");
     let mut streamed_text = String::new();
-    let mut streamed_reasoning = String::new();
     let resp = client
         .chat_stream(
             &[
@@ -176,12 +175,7 @@ async fn main() {
             exit(1);
         });
     if let Some(rc) = &resp.reasoning_content {
-        streamed_reasoning.push_str(rc);
-    }
-    if !streamed_reasoning.is_empty() {
-        t.check(true, "async streamed reasoning captured");
-    } else {
-        t.note("no reasoning field emitted in stream");
+        println!("  streamed reasoning ({} chars)", rc.chars().count());
     }
     println!("  streamed text: {}", truncate(&streamed_text, 150));
     for (i, tc) in resp.tool_calls.iter().enumerate() {

@@ -63,6 +63,29 @@ client.chat_stream(
 ).unwrap();
 ```
 
+`on_delta` is a catch-all: it receives both text and reasoning/thinking tokens.
+To render reasoning distinctly, use `chat_stream_rich` with a `StreamHandler` —
+every callback is optional:
+
+```rust
+use openai_client_rs::StreamHandler;
+
+let resp = client.chat_stream_rich(
+    &[ChatMessage::user("Think step by step, then answer.")],
+    None,
+    StreamHandler::new()
+        .on_delta(|d| print!("{d}"))
+        .on_thinking(|t| print!("[think] {t}"))  // optional
+        .on_tool_call(|name, args| println!("Tool: {name} {args}")), // optional
+).unwrap();
+```
+
+Without `on_thinking`, thinking falls through to `on_delta`, so a handler
+registering only `on_delta` behaves exactly like `chat_stream`.
+`send_stream` / `send_stream_rich`, `chat_stream_cancellable(_rich)`,
+`chat_stream_with_max_tokens(_rich)`, and the async equivalents all follow the
+same pattern.
+
 ### Tool Calling
 
 ```rust
