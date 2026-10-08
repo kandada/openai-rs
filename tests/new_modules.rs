@@ -10,11 +10,23 @@ use openai_client_rs::*;
 #[test]
 fn test_retry_succeeds_on_eventual_success() {
     use openai_client_rs::retry::*;
-    let config = RetryConfig { max_retries: 5, base_delay_ms: 1, max_delay_ms: 10 };
+    let config = RetryConfig {
+        max_retries: 5,
+        base_delay_ms: 1,
+        max_delay_ms: 10,
+    };
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
-        || { calls += 1; if calls < 4 { Err("transient") } else { Ok(42) } },
-        &config, |_| true,
+        || {
+            calls += 1;
+            if calls < 4 {
+                Err("transient")
+            } else {
+                Ok(42)
+            }
+        },
+        &config,
+        |_| true,
     );
     assert_eq!(result.unwrap(), 42);
     assert_eq!(calls, 4);
@@ -23,11 +35,19 @@ fn test_retry_succeeds_on_eventual_success() {
 #[test]
 fn test_retry_stops_at_max() {
     use openai_client_rs::retry::*;
-    let config = RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 };
+    let config = RetryConfig {
+        max_retries: 2,
+        base_delay_ms: 1,
+        max_delay_ms: 10,
+    };
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
-        || { calls += 1; Err("always fail") },
-        &config, |_| true,
+        || {
+            calls += 1;
+            Err("always fail")
+        },
+        &config,
+        |_| true,
     );
     assert!(result.is_err());
     assert_eq!(calls, 3); // 1 initial + 2 retries
@@ -39,8 +59,12 @@ fn test_retry_non_retryable_immediate() {
     let config = RetryConfig::default();
     let mut calls = 0;
     let result: std::result::Result<i32, &str> = retry_sync(
-        || { calls += 1; Err("fatal") },
-        &config, |_| false,
+        || {
+            calls += 1;
+            Err("fatal")
+        },
+        &config,
+        |_| false,
     );
     assert!(result.is_err());
     assert_eq!(calls, 1);
@@ -49,7 +73,11 @@ fn test_retry_non_retryable_immediate() {
 #[test]
 fn test_retry_delay_grows() {
     use openai_client_rs::retry::*;
-    let config = RetryConfig { max_retries: 10, base_delay_ms: 100, max_delay_ms: 10000 };
+    let config = RetryConfig {
+        max_retries: 10,
+        base_delay_ms: 100,
+        max_delay_ms: 10000,
+    };
     let d0 = config.delay_ms(0);
     let d1 = config.delay_ms(1);
     let d4 = config.delay_ms(4);
@@ -61,15 +89,23 @@ fn test_retry_delay_grows() {
 #[test]
 fn test_retry_with_openai_error() {
     use openai_client_rs::retry::*;
-    let config = RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 };
+    let config = RetryConfig {
+        max_retries: 2,
+        base_delay_ms: 1,
+        max_delay_ms: 10,
+    };
     let mut calls = 0;
     let result: std::result::Result<i32, OpenAiError> = retry_sync(
         || {
             calls += 1;
-            if calls < 2 { Err(OpenAiError::Network("timeout".into())) }
-            else { Ok(42) }
+            if calls < 2 {
+                Err(OpenAiError::Network("timeout".into()))
+            } else {
+                Ok(42)
+            }
         },
-        &config, |e| e.is_retryable(),
+        &config,
+        |e| e.is_retryable(),
     );
     assert_eq!(result.unwrap(), 42);
 }
@@ -103,9 +139,17 @@ fn test_count_message_tokens_simple() {
 
 #[test]
 fn test_count_message_tokens_with_tool_calls() {
-    let msg = ChatMessage::assistant_with_tools("", vec![
-        ToolCall { id: "1".into(), call_type: "function".into(), function: FunctionCall { name: "run".into(), arguments: "{\"a\":1}".into() }}
-    ]);
+    let msg = ChatMessage::assistant_with_tools(
+        "",
+        vec![ToolCall {
+            id: "1".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "run".into(),
+                arguments: "{\"a\":1}".into(),
+            },
+        }],
+    );
     let n = openai_client_rs::tokens::count_message_tokens(&msg);
     assert!(n >= 15, "got {n}");
 }

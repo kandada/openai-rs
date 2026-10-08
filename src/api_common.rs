@@ -8,7 +8,7 @@
 use serde_json::{json, Value};
 
 use crate::thinking;
-use crate::types::{ChatMessage, ChatCompletion, LlmResponse, SimplifiedToolCall, Tool};
+use crate::types::{ChatCompletion, ChatMessage, LlmResponse, SimplifiedToolCall, Tool};
 
 /// Options controlling how a chat request body is built.
 #[derive(Debug, Clone, Default)]
@@ -31,7 +31,10 @@ pub fn build_messages_json(messages: &[ChatMessage]) -> Vec<Value> {
         let mut obj = json!({ "role": m.role });
         let map = obj.as_object_mut().unwrap();
         if let Some(ref parts) = m.content_parts {
-            map.insert("content".into(), serde_json::to_value(parts).unwrap_or_default());
+            map.insert(
+                "content".into(),
+                serde_json::to_value(parts).unwrap_or_default(),
+            );
         } else {
             map.insert("content".into(), Value::String(m.content.clone()));
         }
@@ -105,7 +108,10 @@ pub fn build_chat_body(
     }
     if let Some(tools) = tools {
         if !tools.is_empty() {
-            let arr: Vec<Value> = tools.iter().map(|t| serde_json::to_value(t).unwrap_or_default()).collect();
+            let arr: Vec<Value> = tools
+                .iter()
+                .map(|t| serde_json::to_value(t).unwrap_or_default())
+                .collect();
             body["tools"] = Value::Array(arr);
             body["tool_choice"] = json!("auto");
         }

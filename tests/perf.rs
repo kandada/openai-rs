@@ -17,7 +17,13 @@ use openai_client_rs::*;
 
 fn parse_stream(raw: &str) -> LlmResponse {
     let cancel = AtomicBool::new(false);
-    parse_openai_stream(Cursor::new(raw.as_bytes().to_vec()), |_| {}, |_, _| {}, &cancel).unwrap()
+    parse_openai_stream(
+        Cursor::new(raw.as_bytes().to_vec()),
+        |_| {},
+        |_, _| {},
+        &cancel,
+    )
+    .unwrap()
 }
 
 fn big_text_stream(n: usize) -> String {
@@ -59,7 +65,10 @@ fn streams_100k_chunks() {
     let resp = parse_stream(&raw);
     let elapsed = start.elapsed();
     assert_eq!(resp.text.len(), 100_000);
-    assert!(elapsed < Duration::from_secs(5), "100k chunks took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "100k chunks took {elapsed:?}"
+    );
     println!("100k chunks parsed in {elapsed:?}");
 }
 
@@ -75,7 +84,10 @@ fn reassembles_many_parallel_tool_calls_from_fragments() {
         assert_eq!(tc.id, format!("c{i}"));
         assert_eq!(tc.parsed_args()["cmd"], format!("echo {i}"));
     }
-    assert!(elapsed < Duration::from_secs(5), "500 parallel tool calls took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "500 parallel tool calls took {elapsed:?}"
+    );
     println!("500 fragmented tool calls reassembled in {elapsed:?}");
 }
 
@@ -84,14 +96,19 @@ fn think_tags_over_large_content() {
     // 5k interleaved <think> blocks in a large content string.
     let mut content = String::with_capacity(1_000_000);
     for i in 0..5_000 {
-        content.push_str(&format!("<think>thinking block {i} with padding padding padding</think>answer {i} "));
+        content.push_str(&format!(
+            "<think>thinking block {i} with padding padding padding</think>answer {i} "
+        ));
     }
     let start = Instant::now();
     let (think, text) = openai_client_rs::thinking::split_thinking(&content);
     let elapsed = start.elapsed();
     assert!(think.starts_with("thinking block 0"));
     assert!(text.contains("answer 4999"));
-    assert!(elapsed < Duration::from_secs(5), "1MB tag parse took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "1MB tag parse took {elapsed:?}"
+    );
     println!("1MB <think> tag content split in {elapsed:?}");
 }
 
@@ -101,8 +118,7 @@ fn builds_large_message_history() {
     for i in 0..2_000 {
         match i % 3 {
             0 => msgs.push(ChatMessage::system(format!("system {i}"))),
-            1 => msgs.push(ChatMessage::user(format!("user {i}")),
-            ),
+            1 => msgs.push(ChatMessage::user(format!("user {i}"))),
             _ => msgs.push(ChatMessage::assistant(format!("assistant {i}"))),
         }
     }
@@ -110,7 +126,10 @@ fn builds_large_message_history() {
     let out = openai_client_rs::api_common::build_messages_json(&msgs);
     let elapsed = start.elapsed();
     assert_eq!(out.len(), 2_000);
-    assert!(elapsed < Duration::from_secs(5), "2k-message build took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "2k-message build took {elapsed:?}"
+    );
     println!("2k-message build in {elapsed:?}");
 }
 
@@ -121,7 +140,10 @@ fn counts_tokens_on_large_text() {
     let n = openai_client_rs::tokens::count_tokens(&big);
     let elapsed = start.elapsed();
     assert!(n > 0);
-    assert!(elapsed < Duration::from_secs(5), "1MB token count took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "1MB token count took {elapsed:?}"
+    );
     println!("1MB token count ({n} tokens) in {elapsed:?}");
 }
 
@@ -136,7 +158,10 @@ fn retry_delay_many_invocations() {
     }
     let elapsed = start.elapsed();
     assert!(acc > 0);
-    assert!(elapsed < Duration::from_secs(2), "100k delay_ms took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "100k delay_ms took {elapsed:?}"
+    );
     println!("100k retry delay computations in {elapsed:?}");
 }
 
@@ -162,7 +187,10 @@ fn non_streaming_assemble_large_response() {
     let resp = openai_client_rs::api_common::assemble_response(&cc);
     let elapsed = start.elapsed();
     assert!(resp.text.starts_with("block 0"));
-    assert!(elapsed < Duration::from_secs(5), "large assembly took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "large assembly took {elapsed:?}"
+    );
     println!("large non-streaming assembly in {elapsed:?}");
 }
 
@@ -206,7 +234,9 @@ async fn async_sse_many_chunks_one_line_each() {
     use openai_client_rs::async_sse::AsyncSseStream;
 
     let line = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n".to_string();
-    let chunks: Vec<bytes::Bytes> = (0..50_000).map(|_| bytes::Bytes::from(line.clone())).collect();
+    let chunks: Vec<bytes::Bytes> = (0..50_000)
+        .map(|_| bytes::Bytes::from(line.clone()))
+        .collect();
     let stream = stream::iter(chunks.into_iter().map(Ok::<_, reqwest::Error>));
     let mut sse = AsyncSseStream::new(stream);
 
@@ -217,6 +247,9 @@ async fn async_sse_many_chunks_one_line_each() {
     }
     let elapsed = start.elapsed();
     assert_eq!(n, 50_000);
-    assert!(elapsed < Duration::from_secs(10), "50k chunked lines took {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "50k chunked lines took {elapsed:?}"
+    );
     println!("async SSE: 50k one-line chunks drained in {elapsed:?}");
 }

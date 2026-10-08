@@ -35,48 +35,48 @@
 //! println!("{}", resp.text);
 //! ```
 
-pub mod error;
-pub mod types;
-pub mod sse;
 pub mod api_common;
+pub mod audio;
+pub mod error;
+pub mod files;
+pub mod images;
 pub mod models;
 pub mod request;
 pub mod retry;
-pub mod tokens;
-pub mod images;
-pub mod audio;
-pub mod files;
+pub mod sse;
 pub mod thinking;
+pub mod tokens;
+pub mod types;
 
-mod client;
 mod chat;
+mod client;
 mod embeddings;
 
 #[cfg(feature = "async")]
-pub mod async_sse;
+pub mod async_chat;
 #[cfg(feature = "async")]
 mod async_client;
 #[cfg(feature = "async")]
-pub mod async_chat;
+mod async_embeddings;
 #[cfg(feature = "async")]
 mod async_models;
 #[cfg(feature = "async")]
-mod async_embeddings;
+pub mod async_sse;
 
-pub use client::OpenAiClient;
 #[cfg(feature = "async")]
 pub use async_client::OpenAiAsyncClient;
-pub use error::{OpenAiError, ApiError, Result};
-pub use types::{
-    ChatCompletion, ChatCompletionChoice, ChatCompletionChunk,
-    ChatCompletionTokenLogprob, ChatMessage, ChatMessageContent, ChoiceLogprobs,
-    ContentPart, EmbeddingResponse, FunctionCall, ImageUrl, LlmResponse, ModelInfo,
-    SimplifiedToolCall, Tool, ToolCall, ToolChoice, ToolFunction, TopLogprob, Usage,
-};
-pub use models::ModelList;
-pub use request::{ChatCompletionRequest, ResponseFormat, StreamOptions, JsonSchemaObject};
-pub use retry::RetryConfig;
-pub use images::{ImageRequest, ImageResponse, ImageData};
 pub use audio::{SpeechRequest, TranscriptionRequest, TranscriptionResponse};
-pub use files::{FileObject, FileList};
-pub use chat::{parse_openai_stream, parse_openai_stream_rich, StreamHandler, ChatChunkStream};
+pub use chat::{parse_openai_stream, parse_openai_stream_rich, ChatChunkStream, StreamHandler};
+pub use client::OpenAiClient;
+pub use error::{ApiError, OpenAiError, Result};
+pub use files::{FileList, FileObject};
+pub use images::{ImageData, ImageRequest, ImageResponse};
+pub use models::ModelList;
+pub use request::{ChatCompletionRequest, JsonSchemaObject, ResponseFormat, StreamOptions};
+pub use retry::RetryConfig;
+pub use types::{
+    ChatCompletion, ChatCompletionChoice, ChatCompletionChunk, ChatCompletionTokenLogprob,
+    ChatMessage, ChatMessageContent, ChoiceLogprobs, ContentPart, EmbeddingResponse, FunctionCall,
+    ImageUrl, LlmResponse, ModelInfo, SimplifiedToolCall, Tool, ToolCall, ToolChoice, ToolFunction,
+    TopLogprob, Usage,
+};

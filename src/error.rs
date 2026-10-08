@@ -158,7 +158,9 @@ mod tests {
     #[test]
     fn display_formats() {
         assert_eq!(OpenAiError::Cancelled.to_string(), "cancelled");
-        assert!(OpenAiError::Config("x".into()).to_string().contains("config"));
+        assert!(OpenAiError::Config("x".into())
+            .to_string()
+            .contains("config"));
         let api = OpenAiError::api(503, None, "unavailable");
         assert!(api.to_string().contains("HTTP 503"));
     }

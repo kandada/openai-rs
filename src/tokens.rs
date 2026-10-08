@@ -23,7 +23,9 @@ use crate::types::{ChatMessage, ContentPart};
 /// ≈ 2 tokens per 4 chars (≈2 chars/token). Calibrated against DeepSeek /
 /// MiniMax via the `token_calibration` example.
 pub fn count_tokens(text: &str) -> u64 {
-    if text.is_empty() { return 0; }
+    if text.is_empty() {
+        return 0;
+    }
     let mut tokens = 0;
     for ch in text.chars() {
         if ch.is_ascii() {
@@ -80,7 +82,11 @@ pub fn count_messages_tokens(messages: &[ChatMessage]) -> u64 {
 /// Like [`count_messages_tokens`] but adds a provider-specific chat-template
 /// overhead (see [`PROMPT_OVERHEAD`]).
 pub fn count_messages_tokens_with_overhead(messages: &[ChatMessage], overhead: u64) -> u64 {
-    overhead + messages.iter().map(|m| count_message_tokens(m) + 1).sum::<u64>()
+    overhead
+        + messages
+            .iter()
+            .map(|m| count_message_tokens(m) + 1)
+            .sum::<u64>()
 }
 
 /// Estimate max_tokens for a completion based on desired response length.

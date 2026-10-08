@@ -3,10 +3,10 @@
 
 //! Async Embeddings API.
 
-use serde_json::Value;
 use crate::async_client::OpenAiAsyncClient;
 use crate::error::Result;
 use crate::types::EmbeddingResponse;
+use serde_json::Value;
 
 impl OpenAiAsyncClient {
     /// Create embeddings for the given input(s).
@@ -19,7 +19,12 @@ impl OpenAiAsyncClient {
         let input_value = if input_arr.len() == 1 {
             Value::String(input_arr[0].to_string())
         } else {
-            Value::Array(input_arr.iter().map(|s| Value::String(s.to_string())).collect())
+            Value::Array(
+                input_arr
+                    .iter()
+                    .map(|s| Value::String(s.to_string()))
+                    .collect(),
+            )
         };
         let body = serde_json::json!({
             "model": model,
@@ -32,6 +37,11 @@ impl OpenAiAsyncClient {
     /// Create a single embedding.
     pub async fn embedding_create(&self, input: impl AsRef<str>, model: &str) -> Result<Vec<f64>> {
         let resp = self.embeddings_create(&[input], model).await?;
-        Ok(resp.data.into_iter().next().map(|d| d.embedding).unwrap_or_default())
+        Ok(resp
+            .data
+            .into_iter()
+            .next()
+            .map(|d| d.embedding)
+            .unwrap_or_default())
     }
 }

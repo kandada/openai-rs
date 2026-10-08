@@ -6,8 +6,8 @@
 //! Covers: types serde, request building, SSE parsing, tool calling,
 //! error handling, async SSE, and client configuration.
 
-use serde_json::json;
 use openai_client_rs::*;
+use serde_json::json;
 
 // ── Types: serialization roundtrips ────────────────────────────────────────
 
@@ -27,7 +27,10 @@ fn test_tool_call_serde_roundtrip() {
         vec![ToolCall {
             id: "call_1".into(),
             call_type: "function".into(),
-            function: FunctionCall { name: "run".into(), arguments: "{\"a\":1}".into() },
+            function: FunctionCall {
+                name: "run".into(),
+                arguments: "{\"a\":1}".into(),
+            },
         }],
     );
     let json_str = serde_json::to_string(&msg).unwrap();
@@ -61,7 +64,10 @@ fn test_chat_completion_deserialize() {
     });
     let cc: ChatCompletion = serde_json::from_value(raw).unwrap();
     assert_eq!(cc.id, "chatcmpl-123");
-    assert_eq!(cc.choices[0].message.content.as_deref(), Some("Hello! How can I help?"));
+    assert_eq!(
+        cc.choices[0].message.content.as_deref(),
+        Some("Hello! How can I help?")
+    );
     assert_eq!(cc.usage.as_ref().unwrap().total_tokens, 15);
 }
 
@@ -114,7 +120,11 @@ fn test_chat_completion_chunk_deserialize() {
 
 #[test]
 fn test_tool_serde() {
-    let tool = Tool::function("my_fn", "does things", json!({"type":"object","properties":{}}));
+    let tool = Tool::function(
+        "my_fn",
+        "does things",
+        json!({"type":"object","properties":{}}),
+    );
     let v = serde_json::to_value(&tool).unwrap();
     assert_eq!(v["type"], "function");
     assert_eq!(v["function"]["name"], "my_fn");
@@ -156,7 +166,10 @@ fn test_user_with_parts_serde() {
     let msg = ChatMessage::user_with_parts(vec![
         ContentPart::Text { text: "hi".into() },
         ContentPart::ImageUrl {
-            image_url: openai_client_rs::ImageUrl { url: "https://x.com/a.jpg".into(), detail: Some("high".into()) },
+            image_url: openai_client_rs::ImageUrl {
+                url: "https://x.com/a.jpg".into(),
+                detail: Some("high".into()),
+            },
         },
     ]);
     let built = openai_client_rs::api_common::build_messages_json(&[msg]);
@@ -180,7 +193,11 @@ fn test_request_builder_minimal() {
 
 #[test]
 fn test_request_builder_full() {
-    let tools = vec![Tool::function("f", "d", json!({"type":"object","properties":{"x":{"type":"string"}}}))];
+    let tools = vec![Tool::function(
+        "f",
+        "d",
+        json!({"type":"object","properties":{"x":{"type":"string"}}}),
+    )];
     let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("hi")])
         .temperature(0.3)
         .top_p(0.95)
@@ -194,7 +211,9 @@ fn test_request_builder_full() {
         .reasoning_effort("low")
         .user("user-1")
         .stream(true)
-        .stream_options(StreamOptions { include_usage: Some(true) });
+        .stream_options(StreamOptions {
+            include_usage: Some(true),
+        });
 
     let body = req.build_body();
     assert_eq!(body["temperature"], 0.3);
@@ -213,7 +232,8 @@ fn test_request_builder_full() {
 
 #[test]
 fn test_request_builder_response_format_json_schema() {
-    let schema = json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]});
+    let schema =
+        json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]});
     let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("hi")])
         .response_format(ResponseFormat::json_schema("MySchema", schema, true));
     let body = req.build_body();
@@ -235,9 +255,12 @@ fn test_request_builder_max_completion_tokens_priority() {
 
 #[test]
 fn test_request_builder_tool_choice_auto() {
-    let tools = vec![Tool::function("f", "d", json!({"type":"object","properties":{}}))];
-    let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("hi")])
-        .tools(tools);
+    let tools = vec![Tool::function(
+        "f",
+        "d",
+        json!({"type":"object","properties":{}}),
+    )];
+    let req = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("hi")]).tools(tools);
     let body = req.build_body();
     assert_eq!(body["tool_choice"], "auto");
 }
@@ -262,7 +285,8 @@ fn test_sse_parse_content_stream() {
         |d| deltas.push(d.to_string()),
         |_, _| {},
         &cancel,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(deltas.join(""), "AB");
     assert_eq!(resp.text, "AB");
     assert_eq!(resp.finish_reason.as_deref(), Some("stop"));
@@ -285,7 +309,8 @@ fn test_sse_parse_reasoning_content() {
         |_| {},
         |_, _| {},
         &cancel,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(resp.text, "answer");
     assert_eq!(resp.reasoning_content.as_deref(), Some("step1step2"));
 }
@@ -308,7 +333,8 @@ fn test_sse_parse_tool_calls() {
         |_| {},
         |n, a| tools.push((n.to_string(), a.to_string())),
         &cancel,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(resp.tool_calls.len(), 1);
     assert_eq!(resp.tool_calls[0].name, "exec");
     assert_eq!(resp.tool_calls[0].id, "t1");
@@ -324,7 +350,9 @@ fn test_sse_parse_cancel() {
     let cancel = AtomicBool::new(true);
     let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
-        |_| {}, |_, _| {}, &cancel,
+        |_| {},
+        |_, _| {},
+        &cancel,
     );
     assert!(matches!(r, Err(OpenAiError::Cancelled)));
 }
@@ -338,7 +366,9 @@ fn test_sse_parse_all_malformed() {
     let cancel = AtomicBool::new(false);
     let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
-        |_| {}, |_, _| {}, &cancel,
+        |_| {},
+        |_, _| {},
+        &cancel,
     );
     assert!(r.is_err());
 }
@@ -352,7 +382,9 @@ fn test_sse_parse_in_stream_error() {
     let cancel = AtomicBool::new(false);
     let r = openai_client_rs::parse_openai_stream(
         Cursor::new(raw.as_bytes().to_vec()),
-        |_| {}, |_, _| {}, &cancel,
+        |_| {},
+        |_, _| {},
+        &cancel,
     );
     assert!(r.is_err());
     if let Err(OpenAiError::Api(e)) = r {
@@ -384,11 +416,20 @@ fn test_error_display() {
 
 #[test]
 fn test_llm_response_truncated() {
-    let resp = LlmResponse { finish_reason: Some("length".into()), ..Default::default() };
+    let resp = LlmResponse {
+        finish_reason: Some("length".into()),
+        ..Default::default()
+    };
     assert!(resp.is_truncated());
-    let resp = LlmResponse { finish_reason: Some("max_tokens".into()), ..Default::default() };
+    let resp = LlmResponse {
+        finish_reason: Some("max_tokens".into()),
+        ..Default::default()
+    };
     assert!(resp.is_truncated());
-    let resp = LlmResponse { finish_reason: Some("stop".into()), ..Default::default() };
+    let resp = LlmResponse {
+        finish_reason: Some("stop".into()),
+        ..Default::default()
+    };
     assert!(!resp.is_truncated());
 }
 
@@ -403,7 +444,10 @@ fn test_client_new() {
 #[test]
 fn test_client_with_base_url() {
     let c = OpenAiClient::with_base_url("sk-test", "deepseek-chat", "https://api.deepseek.com/v1");
-    assert_eq!(c.endpoint("chat/completions"), "https://api.deepseek.com/v1/chat/completions");
+    assert_eq!(
+        c.endpoint("chat/completions"),
+        "https://api.deepseek.com/v1/chat/completions"
+    );
 }
 
 #[test]
@@ -439,9 +483,18 @@ fn test_embedding_response_deserialize() {
 
 #[test]
 fn test_tool_choice_serialization() {
-    assert_eq!(serde_json::to_string(&ToolChoice::auto()).unwrap(), "\"auto\"");
-    assert_eq!(serde_json::to_string(&ToolChoice::none()).unwrap(), "\"none\"");
-    assert_eq!(serde_json::to_string(&ToolChoice::required()).unwrap(), "\"required\"");
+    assert_eq!(
+        serde_json::to_string(&ToolChoice::auto()).unwrap(),
+        "\"auto\""
+    );
+    assert_eq!(
+        serde_json::to_string(&ToolChoice::none()).unwrap(),
+        "\"none\""
+    );
+    assert_eq!(
+        serde_json::to_string(&ToolChoice::required()).unwrap(),
+        "\"required\""
+    );
     let specific = ToolChoice::specific("my_func");
     let v = serde_json::to_value(&specific).unwrap();
     assert_eq!(v["type"], "function");

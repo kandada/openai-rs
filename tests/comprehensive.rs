@@ -23,7 +23,13 @@ use openai_client_rs::*;
 
 fn parse_stream(raw: &str) -> LlmResponse {
     let cancel = AtomicBool::new(false);
-    parse_openai_stream(Cursor::new(raw.as_bytes().to_vec()), |_| {}, |_, _| {}, &cancel).unwrap()
+    parse_openai_stream(
+        Cursor::new(raw.as_bytes().to_vec()),
+        |_| {},
+        |_, _| {},
+        &cancel,
+    )
+    .unwrap()
 }
 
 // ── Full streaming conversation ─────────────────────────────────────────────
@@ -175,12 +181,15 @@ fn build_completion(content: &str) -> ChatCompletion {
             "finish_reason": "stop"
         }],
         "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
-    })).unwrap()
+    }))
+    .unwrap()
 }
 
 #[test]
 fn non_streaming_strips_think_tags_from_content() {
-    let resp = openai_client_rs::api_common::assemble_response(&build_completion("<think>deep</think>answer"));
+    let resp = openai_client_rs::api_common::assemble_response(&build_completion(
+        "<think>deep</think>answer",
+    ));
     assert_eq!(resp.reasoning_content.as_deref(), Some("deep"));
     assert_eq!(resp.text, "answer");
     assert_eq!(resp.usage.unwrap().total_tokens, 3);
@@ -260,7 +269,9 @@ fn request_builder_reasoning_models_use_max_completion_tokens() {
 fn request_builder_stream_options_include_usage() {
     let body = ChatCompletionRequest::new("gpt-4o", vec![ChatMessage::user("hi")])
         .stream(true)
-        .stream_options(StreamOptions { include_usage: Some(true) })
+        .stream_options(StreamOptions {
+            include_usage: Some(true),
+        })
         .build_body();
     assert_eq!(body["stream_options"]["include_usage"], true);
 }
@@ -316,7 +327,8 @@ const COMPLETION_200_BODY: &str = r#"{"id":"chatcmpl_1","object":"chat.completio
 fn respond_once(req: tiny_http::Request, body: &str, status: u16, retry_after: Option<&str>) {
     let mut resp = tiny_http::Response::from_string(body.to_string()).with_status_code(status);
     if let Some(ra) = retry_after {
-        resp = resp.with_header(tiny_http::Header::from_bytes(b"Retry-After", ra.as_bytes()).unwrap());
+        resp =
+            resp.with_header(tiny_http::Header::from_bytes(b"Retry-After", ra.as_bytes()).unwrap());
     }
     req.respond(resp).unwrap();
 }
@@ -337,12 +349,17 @@ fn chat_retries_on_429_then_succeeds() {
         respond_once(server.recv().unwrap(), COMPLETION_200_BODY, 200, None);
     });
 
-    let client = OpenAiClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 });
+    let client =
+        OpenAiClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 2,
+                base_delay_ms: 1,
+                max_delay_ms: 10,
+            });
 
-    let resp = client.chat_create(&[ChatMessage::user("hi")], None).unwrap();
+    let resp = client
+        .chat_create(&[ChatMessage::user("hi")], None)
+        .unwrap();
     assert_eq!(resp.text, "server ok");
     handle.join().unwrap();
 }
@@ -356,12 +373,17 @@ fn chat_retries_on_503_and_honors_retry_after() {
         respond_once(server.recv().unwrap(), COMPLETION_200_BODY, 200, None);
     });
 
-    let client = OpenAiClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 2, base_delay_ms: 1000, max_delay_ms: 5000 });
+    let client =
+        OpenAiClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 2,
+                base_delay_ms: 1000,
+                max_delay_ms: 5000,
+            });
 
-    let resp = client.chat_create(&[ChatMessage::user("hi")], None).unwrap();
+    let resp = client
+        .chat_create(&[ChatMessage::user("hi")], None)
+        .unwrap();
     assert_eq!(resp.text, "server ok");
     handle.join().unwrap();
 }
@@ -374,12 +396,17 @@ fn chat_does_not_retry_on_400() {
         respond_once(server.recv().unwrap(), "bad request", 400, None);
     });
 
-    let client = OpenAiClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 3, base_delay_ms: 1000, max_delay_ms: 5000 });
+    let client =
+        OpenAiClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 3,
+                base_delay_ms: 1000,
+                max_delay_ms: 5000,
+            });
 
-    let err = client.chat_create(&[ChatMessage::user("hi")], None).unwrap_err();
+    let err = client
+        .chat_create(&[ChatMessage::user("hi")], None)
+        .unwrap_err();
     match &err {
         OpenAiError::Api(ae) => assert_eq!(ae.status_code, Some(400)),
         _ => panic!("expected Api 400, got {err:?}"),
@@ -401,14 +428,22 @@ fn chat_stream_retries_on_5xx() {
         respond_once(server.recv().unwrap(), body, 200, None);
     });
 
-    let client = OpenAiClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 });
+    let client =
+        OpenAiClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 2,
+                base_delay_ms: 1,
+                max_delay_ms: 10,
+            });
 
     let mut deltas = Vec::new();
     let resp = client
-        .chat_stream(&[ChatMessage::user("hi")], None, |d| deltas.push(d.to_string()), |_, _| {})
+        .chat_stream(
+            &[ChatMessage::user("hi")],
+            None,
+            |d| deltas.push(d.to_string()),
+            |_, _| {},
+        )
         .unwrap();
     assert_eq!(resp.text, "streamed");
     assert_eq!(deltas.join(""), "streamed");
@@ -446,12 +481,18 @@ async fn async_chat_retries_on_429_then_succeeds() {
         respond_once(server.recv().unwrap(), COMPLETION_200_BODY, 200, None);
     });
 
-    let client = OpenAiAsyncClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 2, base_delay_ms: 1, max_delay_ms: 10 });
+    let client =
+        OpenAiAsyncClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 2,
+                base_delay_ms: 1,
+                max_delay_ms: 10,
+            });
 
-    let resp = client.chat_create(&[ChatMessage::user("hi")], None).await.unwrap();
+    let resp = client
+        .chat_create(&[ChatMessage::user("hi")], None)
+        .await
+        .unwrap();
     assert_eq!(resp.text, "server ok");
     handle.join().unwrap();
 }
@@ -467,12 +508,18 @@ async fn async_chat_does_not_retry_on_400() {
         respond_once(server.recv().unwrap(), "bad request", 400, None);
     });
 
-    let client = OpenAiAsyncClient::with_base_url(
-        "sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 3, base_delay_ms: 1000, max_delay_ms: 5000 });
+    let client =
+        OpenAiAsyncClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 3,
+                base_delay_ms: 1000,
+                max_delay_ms: 5000,
+            });
 
-    let err = client.chat_create(&[ChatMessage::user("hi")], None).await.unwrap_err();
+    let err = client
+        .chat_create(&[ChatMessage::user("hi")], None)
+        .await
+        .unwrap_err();
     match &err {
         OpenAiError::Api(ae) => assert_eq!(ae.status_code, Some(400)),
         _ => panic!("expected Api 400, got {err:?}"),

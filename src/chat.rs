@@ -28,7 +28,9 @@ pub struct ChatChunkStream<R: Read> {
 
 impl<R: Read> ChatChunkStream<R> {
     pub fn new(reader: R) -> Self {
-        ChatChunkStream { sse: SseReader::new(reader) }
+        ChatChunkStream {
+            sse: SseReader::new(reader),
+        }
     }
 }
 
@@ -376,7 +378,10 @@ pub fn parse_openai_stream<R: Read>(
     on_tool_call: impl FnMut(&str, &str),
     cancel: &AtomicBool,
 ) -> Result<LlmResponse> {
-    let mut sink = ClassicSink { on_delta, on_tool_call };
+    let mut sink = ClassicSink {
+        on_delta,
+        on_tool_call,
+    };
     parse_stream_loop(reader, cancel, &mut sink)
 }
 
@@ -436,7 +441,10 @@ fn parse_stream_loop<R: Read>(
 
         // Final usage chunk (arrives when stream_options.include_usage=true)
         // has `choices: []` and a top-level `usage`.
-        if let Some(u) = chunk.get("usage").and_then(|u| serde_json::from_value(u.clone()).ok()) {
+        if let Some(u) = chunk
+            .get("usage")
+            .and_then(|u| serde_json::from_value(u.clone()).ok())
+        {
             usage = Some(u);
         }
 
@@ -795,7 +803,10 @@ mod tests {
     #[test]
     fn build_messages_with_content_parts() {
         let _client = OpenAiClient::new("sk-test", "test");
-        let msgs = vec![ChatMessage::user_with_images("look at this", &["https://example.com/img.png"])];
+        let msgs = vec![ChatMessage::user_with_images(
+            "look at this",
+            &["https://example.com/img.png"],
+        )];
         let built = OpenAiClient::build_messages_json(&msgs);
         assert_eq!(built[0]["role"], "user");
         let content = &built[0]["content"];

@@ -13,7 +13,11 @@ const CONNECT_TIMEOUT_SECS: u64 = 10;
 const DEFAULT_READ_TIMEOUT_SECS: u64 = 30;
 const WRITE_TIMEOUT_SECS: u64 = 30;
 
-fn build_agent(read_timeout_secs: u64, total_timeout_secs: u64, proxy: Option<&str>) -> ureq::Agent {
+fn build_agent(
+    read_timeout_secs: u64,
+    total_timeout_secs: u64,
+    proxy: Option<&str>,
+) -> ureq::Agent {
     let mut b = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(CONNECT_TIMEOUT_SECS))
         .timeout_read(Duration::from_secs(read_timeout_secs))
@@ -243,7 +247,11 @@ impl OpenAiClient {
         }
     }
 
-    pub(crate) fn post_stream(&self, path: &str, body: serde_json::Value) -> Result<impl std::io::Read> {
+    pub(crate) fn post_stream(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<impl std::io::Read> {
         let cfg = &self.retry_config;
         let mut attempt = 0u32;
         loop {
@@ -326,11 +334,8 @@ mod tests {
 
     #[test]
     fn client_with_base_url() {
-        let client = OpenAiClient::with_base_url(
-            "sk-test",
-            "deepseek-chat",
-            "https://api.deepseek.com/v1",
-        );
+        let client =
+            OpenAiClient::with_base_url("sk-test", "deepseek-chat", "https://api.deepseek.com/v1");
         assert_eq!(
             client.endpoint("chat/completions"),
             "https://api.deepseek.com/v1/chat/completions"

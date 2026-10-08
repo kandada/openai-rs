@@ -54,7 +54,10 @@ fn main() {
     println!("  model:    {model}");
     println!("  heuristic: char-based (ASCII=1pt, other=3pt) / divisor");
     println!();
-    println!("{:<30} {:>8} {:>8} {:>8}", "sample", "estimate", "actual", "ratio");
+    println!(
+        "{:<30} {:>8} {:>8} {:>8}",
+        "sample", "estimate", "actual", "ratio"
+    );
 
     let client = OpenAiClient::with_base_url(&key, &model, &base).with_total_timeout(60);
     let mut ratios: Vec<f64> = Vec::new();
@@ -88,16 +91,17 @@ fn main() {
         } else {
             s.to_string()
         };
-        println!(
-            "{label:<30} {estimate:>8} {actual:>8} {ratio:>8.2}",
-        );
+        println!("{label:<30} {estimate:>8} {actual:>8} {ratio:>8.2}",);
     }
 
-    let valid: Vec<f64> = ratios.iter().copied().filter(|r| r.is_finite() && *r > 0.0).collect();
+    let valid: Vec<f64> = ratios
+        .iter()
+        .copied()
+        .filter(|r| r.is_finite() && *r > 0.0)
+        .collect();
     let n = valid.len() as f64;
     let mean_ratio: f64 = valid.iter().sum::<f64>() / n;
-    let mean_abs_err: f64 =
-        valid.iter().map(|r| (r - 1.0).abs()).sum::<f64>() / n;
+    let mean_abs_err: f64 = valid.iter().map(|r| (r - 1.0).abs()).sum::<f64>() / n;
     let max_abs_err: f64 = valid.iter().map(|r| (r - 1.0).abs()).fold(0.0, f64::max);
 
     // Median of (actual − estimate) ≈ the provider's fixed chat-template

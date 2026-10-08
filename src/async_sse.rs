@@ -14,8 +14,8 @@
 
 use std::str;
 
-use futures::StreamExt;
 use crate::error::OpenAiError;
+use futures::StreamExt;
 
 /// An async SSE data payload iterator.
 pub struct AsyncSseStream<S> {
@@ -111,8 +111,7 @@ where
                     // Stream ended: process any remaining partial line (one
                     // that had no trailing `\n`), then flush the last event.
                     if self.read < self.buffer.len() {
-                        let rest =
-                            String::from_utf8_lossy(&self.buffer[self.read..]).into_owned();
+                        let rest = String::from_utf8_lossy(&self.buffer[self.read..]).into_owned();
                         let trimmed = rest.trim_end_matches(['\r', '\n']);
                         if !trimmed.is_empty() {
                             self.accumulate(trimmed);
@@ -222,6 +221,9 @@ mod tests {
         }
         let elapsed = start.elapsed();
         assert_eq!(n, 50_000);
-        assert!(elapsed < Duration::from_secs(3), "50k lines in one chunk took {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "50k lines in one chunk took {elapsed:?}"
+        );
     }
 }

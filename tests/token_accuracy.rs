@@ -38,8 +38,8 @@ fn heuristic_is_deterministic() {
     // Exact, stable behavior of the char heuristic.
     let cases = [
         ("", 0),
-        ("Hello world", 3), // 11 ascii chars → ceil(11/4) = 3
-        ("你好世界", 2),    // 4 CJK chars × 2pts = 8 → 2
+        ("Hello world", 3),        // 11 ascii chars → ceil(11/4) = 3
+        ("你好世界", 2),           // 4 CJK chars × 2pts = 8 → 2
         ("tiktoken is great!", 5), // 18 ascii → ceil(18/4) = 5
     ];
     for (text, expected) in cases {
@@ -61,9 +61,7 @@ fn messages_count_is_additive() {
         ChatMessage::system("You are helpful."),
         ChatMessage::user("Hello"),
     ];
-    let sum = tokens::count_message_tokens(&msgs[0])
-        + tokens::count_message_tokens(&msgs[1])
-        + 2;
+    let sum = tokens::count_message_tokens(&msgs[0]) + tokens::count_message_tokens(&msgs[1]) + 2;
     assert_eq!(tokens::count_messages_tokens(&msgs), sum);
 }
 
@@ -83,7 +81,8 @@ fn tool_calls_and_parts_add_to_count() {
     ));
     assert!(with_tools > plain, "tool calls must add tokens");
 
-    let with_image = tokens::count_message_tokens(&ChatMessage::user_with_images("hi", &["https://x/i.png"]));
+    let with_image =
+        tokens::count_message_tokens(&ChatMessage::user_with_images("hi", &["https://x/i.png"]));
     assert!(with_image > plain, "images must add tokens");
 }
 

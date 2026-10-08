@@ -111,25 +111,35 @@ fn main() {
     let system = ChatMessage::system(
         "You are a helpful assistant. When asked about the weather, call get_weather for each requested city.",
     );
-    let mut t = T { passed: 0, failed: Vec::new() };
+    let mut t = T {
+        passed: 0,
+        failed: Vec::new(),
+    };
 
     // ── Test 1: non-streaming reasoning + tool message roundtrip ───────────
     println!("── Test 1: non-streaming reasoning + multi-turn tool loop ──");
     let mut history: Vec<ChatMessage> = vec![
         system.clone(),
-        ChatMessage::user("What is the weather in San Francisco and in Paris? Use the tool for each."),
+        ChatMessage::user(
+            "What is the weather in San Francisco and in Paris? Use the tool for each.",
+        ),
     ];
     let mut rounds_ok = 0;
     for round in 0..3 {
-        let resp = client.chat_create(&history, Some(&tools)).unwrap_or_else(|e| {
-            eprintln!("❌ round {round} failed: {e}");
-            exit(1);
-        });
+        let resp = client
+            .chat_create(&history, Some(&tools))
+            .unwrap_or_else(|e| {
+                eprintln!("❌ round {round} failed: {e}");
+                exit(1);
+            });
         if let Some(rc) = &resp.reasoning_content {
             println!("  reasoning: {}", truncate(rc, 120));
         }
         if let Some(u) = &resp.usage {
-            println!("  usage: in={} out={} total={}", u.prompt_tokens, u.completion_tokens, u.total_tokens);
+            println!(
+                "  usage: in={} out={} total={}",
+                u.prompt_tokens, u.completion_tokens, u.total_tokens
+            );
         }
         if resp.tool_calls.is_empty() {
             println!("  round {round}: finished: {}", truncate(&resp.text, 120));
@@ -144,13 +154,23 @@ fn main() {
         asst.reasoning_content = resp.reasoning_content.clone();
         history.push(asst);
         for tc in &resp.tool_calls {
-            let city = tc.parsed_args().get("city").cloned().unwrap_or_else(|| json!("?"));
-            history.push(ChatMessage::tool_result(&tc.id, format!("Weather in {city}: sunny, 22C")));
+            let city = tc
+                .parsed_args()
+                .get("city")
+                .cloned()
+                .unwrap_or_else(|| json!("?"));
+            history.push(ChatMessage::tool_result(
+                &tc.id,
+                format!("Weather in {city}: sunny, 22C"),
+            ));
             println!("  ↳ {} <- weather result", tc.name);
         }
         rounds_ok += 1;
     }
-    t.check(rounds_ok > 0, "multi-turn tool loop completed (tool messages roundtripped)");
+    t.check(
+        rounds_ok > 0,
+        "multi-turn tool loop completed (tool messages roundtripped)",
+    );
 
     // ── Test 2: streaming fragmented reasoning + parallel tool calls ───────
     println!("── Test 2: streaming (fragmented reasoning + tool_calls) ──");
@@ -160,7 +180,9 @@ fn main() {
         .chat_stream(
             &[
                 system.clone(),
-                ChatMessage::user("Call get_weather for Tokyo and for Berlin in parallel. Then stop."),
+                ChatMessage::user(
+                    "Call get_weather for Tokyo and for Berlin in parallel. Then stop.",
+                ),
             ],
             Some(&tools),
             |d| streamed_text.push_str(d),
@@ -174,14 +196,27 @@ fn main() {
         println!("  streamed reasoning ({} chars)", rc.chars().count());
     }
     println!("  streamed text: {}", truncate(&streamed_text, 150));
-    t.note(&format!("streamed tool calls: {} (via callback), {} (via response)", streamed_tool_calls.len(), resp.tool_calls.len()));
+    t.note(&format!(
+        "streamed tool calls: {} (via callback), {} (via response)",
+        streamed_tool_calls.len(),
+        resp.tool_calls.len()
+    ));
 
     // Every streamed tool call must have an id, a name, and parseable args.
     for (i, tc) in resp.tool_calls.iter().enumerate() {
-        t.check(!tc.id.is_empty(), &format!("streamed tool_call[{i}] has id"));
-        t.check(!tc.name.is_empty(), &format!("streamed tool_call[{i}] has name"));
+        t.check(
+            !tc.id.is_empty(),
+            &format!("streamed tool_call[{i}] has id"),
+        );
+        t.check(
+            !tc.name.is_empty(),
+            &format!("streamed tool_call[{i}] has name"),
+        );
         let parsed = tc.parsed_args();
-        t.check(parsed.is_object(), &format!("streamed tool_call[{i}] args are JSON"));
+        t.check(
+            parsed.is_object(),
+            &format!("streamed tool_call[{i}] args are JSON"),
+        );
         println!(
             "  ↳ assembled tool_call[{i}] id={} name={} args={}",
             tc.id,
@@ -189,7 +224,10 @@ fn main() {
             serde_json::to_string(&parsed).unwrap_or_default()
         );
     }
-    t.check(!resp.tool_calls.is_empty(), "streamed tool calls reassembled from fragments");
+    t.check(
+        !resp.tool_calls.is_empty(),
+        "streamed tool calls reassembled from fragments",
+    );
 
     // ── Test 3: <think> tag stripping (Qwen-style) ─────────────────────────
     println!("── Test 3: inline <think> tag compatibility ──");
@@ -220,7 +258,10 @@ fn main() {
         // cases. When the provider ALSO sends a reasoning field, the tag
         // content is discarded (not double-added to reasoning).
         let assembled = openai_client_rs::api_common::assemble_response(&probe);
-        t.check(!assembled.text.contains("<think>"), "content stripped of <think> tags");
+        t.check(
+            !assembled.text.contains("<think>"),
+            "content stripped of <think> tags",
+        );
         t.check(
             assembled.reasoning_content.is_some(),
             "reasoning populated (field or tag content)",
@@ -229,7 +270,12 @@ fn main() {
         println!(
             "  assembled: text={} reasoning={}",
             truncate(&assembled.text, 120),
-            assembled.reasoning_content.as_deref().unwrap_or("").chars().count()
+            assembled
+                .reasoning_content
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .count()
         );
     } else {
         t.note("model did not emit <think> tags — provider uses reasoning field instead; skipping tag assertion");
@@ -262,8 +308,14 @@ fn main() {
     ) {
         Ok(resp) => match resp.usage {
             Some(u) => {
-                println!("  usage: in={} out={} total={}", u.prompt_tokens, u.completion_tokens, u.total_tokens);
-                t.check(u.total_tokens > 0, "streaming usage captured from final chunk");
+                println!(
+                    "  usage: in={} out={} total={}",
+                    u.prompt_tokens, u.completion_tokens, u.total_tokens
+                );
+                t.check(
+                    u.total_tokens > 0,
+                    "streaming usage captured from final chunk",
+                );
             }
             None => t.note("provider did not send a usage chunk (stream_options not honored)"),
         },
@@ -279,7 +331,11 @@ fn main() {
                 match c {
                     Ok(chunk) => {
                         seen += 1;
-                        if let Some(d) = chunk.choices.first().and_then(|c| c.delta.content.as_deref()) {
+                        if let Some(d) = chunk
+                            .choices
+                            .first()
+                            .and_then(|c| c.delta.content.as_deref())
+                        {
                             println!("  ↳ [typed] content: {}", truncate(d, 40));
                         }
                     }
@@ -289,7 +345,10 @@ fn main() {
                     }
                 }
             }
-            t.check(seen > 0, &format!("typed chunk stream yielded {seen} chunks"));
+            t.check(
+                seen > 0,
+                &format!("typed chunk stream yielded {seen} chunks"),
+            );
         }
         Err(e) => t.check(false, &format!("chat_stream_chunks failed: {e}")),
     }
@@ -302,7 +361,10 @@ fn main() {
         .logit_bias(json!({"42": -100}));
     match client.send(&req) {
         Ok(resp) => {
-            t.check(!resp.text.is_empty(), "logit_bias + logprobs request accepted");
+            t.check(
+                !resp.text.is_empty(),
+                "logit_bias + logprobs request accepted",
+            );
             let has_logprobs = resp
                 .raw
                 .as_ref()
@@ -310,7 +372,12 @@ fn main() {
                 .and_then(|c| c.logprobs.as_ref())
                 .is_some();
             t.check(has_logprobs, "provider returned typed logprobs");
-            if let Some(lp) = resp.raw.as_ref().and_then(|r| r.choices.first()).and_then(|c| c.logprobs.as_ref()) {
+            if let Some(lp) = resp
+                .raw
+                .as_ref()
+                .and_then(|r| r.choices.first())
+                .and_then(|c| c.logprobs.as_ref())
+            {
                 if let Some(content) = &lp.content {
                     if let Some(first) = content.first() {
                         println!(

@@ -15,16 +15,18 @@
 //!   cargo run --example e2e_async --features async
 
 #[cfg(feature = "async")]
-use std::env;
-use std::process::exit;
-#[cfg(feature = "async")]
 use openai_client_rs::*;
 #[cfg(feature = "async")]
 use serde_json::json;
+#[cfg(feature = "async")]
+use std::env;
+use std::process::exit;
 
 #[cfg(not(feature = "async"))]
 fn main() {
-    eprintln!("this example requires the `async` feature: cargo run --example e2e_async --features async");
+    eprintln!(
+        "this example requires the `async` feature: cargo run --example e2e_async --features async"
+    );
     exit(2);
 }
 
@@ -117,25 +119,36 @@ async fn main() {
     let system = ChatMessage::system(
         "You are a helpful assistant. When asked about the weather, call get_weather for each requested city.",
     );
-    let mut t = T { passed: 0, failed: Vec::new() };
+    let mut t = T {
+        passed: 0,
+        failed: Vec::new(),
+    };
 
     // ── Test 1: async non-streaming reasoning + tool loop ──────────────────
     println!("── Test 1: async reasoning + multi-turn tool loop ──");
     let mut history: Vec<ChatMessage> = vec![
         system.clone(),
-        ChatMessage::user("What is the weather in San Francisco and in Paris? Use the tool for each."),
+        ChatMessage::user(
+            "What is the weather in San Francisco and in Paris? Use the tool for each.",
+        ),
     ];
     let mut rounds_ok = 0;
     for round in 0..3 {
-        let resp = client.chat_create(&history, Some(&tools)).await.unwrap_or_else(|e| {
-            eprintln!("❌ async round {round} failed: {e}");
-            exit(1);
-        });
+        let resp = client
+            .chat_create(&history, Some(&tools))
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("❌ async round {round} failed: {e}");
+                exit(1);
+            });
         if let Some(rc) = &resp.reasoning_content {
             println!("  reasoning: {}", truncate(rc, 100));
         }
         if let Some(u) = &resp.usage {
-            println!("  usage: in={} out={} total={}", u.prompt_tokens, u.completion_tokens, u.total_tokens);
+            println!(
+                "  usage: in={} out={} total={}",
+                u.prompt_tokens, u.completion_tokens, u.total_tokens
+            );
         }
         if resp.tool_calls.is_empty() {
             println!("  round {round}: finished: {}", truncate(&resp.text, 120));
@@ -149,8 +162,15 @@ async fn main() {
         asst.reasoning_content = resp.reasoning_content.clone();
         history.push(asst);
         for tc in &resp.tool_calls {
-            let city = tc.parsed_args().get("city").cloned().unwrap_or_else(|| json!("?"));
-            history.push(ChatMessage::tool_result(&tc.id, format!("Weather in {city}: sunny, 22C")));
+            let city = tc
+                .parsed_args()
+                .get("city")
+                .cloned()
+                .unwrap_or_else(|| json!("?"));
+            history.push(ChatMessage::tool_result(
+                &tc.id,
+                format!("Weather in {city}: sunny, 22C"),
+            ));
         }
         rounds_ok += 1;
     }
@@ -163,7 +183,9 @@ async fn main() {
         .chat_stream(
             &[
                 system.clone(),
-                ChatMessage::user("Call get_weather for Tokyo and for Berlin in parallel. Then stop."),
+                ChatMessage::user(
+                    "Call get_weather for Tokyo and for Berlin in parallel. Then stop.",
+                ),
             ],
             Some(&tools),
             |d| streamed_text.push_str(d),
@@ -180,8 +202,14 @@ async fn main() {
     println!("  streamed text: {}", truncate(&streamed_text, 150));
     for (i, tc) in resp.tool_calls.iter().enumerate() {
         t.check(!tc.id.is_empty(), &format!("async tool_call[{i}] has id"));
-        t.check(!tc.name.is_empty(), &format!("async tool_call[{i}] has name"));
-        t.check(tc.parsed_args().is_object(), &format!("async tool_call[{i}] args JSON"));
+        t.check(
+            !tc.name.is_empty(),
+            &format!("async tool_call[{i}] has name"),
+        );
+        t.check(
+            tc.parsed_args().is_object(),
+            &format!("async tool_call[{i}] args JSON"),
+        );
         println!(
             "  ↳ assembled tool_call[{i}] id={} name={} args={}",
             tc.id,
@@ -189,7 +217,10 @@ async fn main() {
             serde_json::to_string(&tc.parsed_args()).unwrap_or_default()
         );
     }
-    t.check(!resp.tool_calls.is_empty(), "async streamed tool calls reassembled");
+    t.check(
+        !resp.tool_calls.is_empty(),
+        "async streamed tool calls reassembled",
+    );
 
     // ── Test 3: async builder path (reasoning_effort) ──────────────────────
     println!("── Test 3: async request-builder path ──");
@@ -209,10 +240,21 @@ async fn main() {
     // ── Test 4: async streaming usage ──────────────────────────────────────
     println!("── Test 4: async streaming usage ──");
     let usage_client = client.with_include_usage(true);
-    match usage_client.chat_stream(&[system, ChatMessage::user("Say hello.")], None, |_| {}, |_, _| {}).await {
+    match usage_client
+        .chat_stream(
+            &[system, ChatMessage::user("Say hello.")],
+            None,
+            |_| {},
+            |_, _| {},
+        )
+        .await
+    {
         Ok(resp) => match resp.usage {
             Some(u) => {
-                println!("  usage: in={} out={} total={}", u.prompt_tokens, u.completion_tokens, u.total_tokens);
+                println!(
+                    "  usage: in={} out={} total={}",
+                    u.prompt_tokens, u.completion_tokens, u.total_tokens
+                );
                 t.check(u.total_tokens > 0, "async streaming usage captured");
             }
             None => t.note("no usage chunk from provider"),

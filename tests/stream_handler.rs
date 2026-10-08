@@ -146,7 +146,8 @@ fn rich_parse_tool_call_callback_only() {
     let t = Rc::clone(&tools);
     let resp = parse_stream_rich(
         TOOL_STREAM,
-        StreamHandler::new().on_tool_call(move |n, a| t.borrow_mut().push((n.to_string(), a.to_string()))),
+        StreamHandler::new()
+            .on_tool_call(move |n, a| t.borrow_mut().push((n.to_string(), a.to_string()))),
     );
     assert_eq!(resp.tool_calls.len(), 1);
     assert_eq!(resp.tool_calls[0].name, "run_shell");
@@ -290,7 +291,8 @@ fn chat_stream_rich_tool_calls_over_http() {
         .chat_stream_rich(
             &[ChatMessage::user("hi")],
             None,
-            StreamHandler::new().on_tool_call(move |n, a| t.borrow_mut().push((n.to_string(), a.to_string()))),
+            StreamHandler::new()
+                .on_tool_call(move |n, a| t.borrow_mut().push((n.to_string(), a.to_string()))),
         )
         .unwrap();
     assert_eq!(resp.tool_calls.len(), 1);
@@ -306,7 +308,10 @@ fn send_stream_rich_over_http() {
     let thinking = Rc::new(RefCell::new(Vec::<String>::new()));
     let t = Rc::clone(&thinking);
     let resp = client(format!("http://127.0.0.1:{port}"))
-        .send_stream_rich(&req, StreamHandler::new().on_thinking(move |s| t.borrow_mut().push(s.to_string())))
+        .send_stream_rich(
+            &req,
+            StreamHandler::new().on_thinking(move |s| t.borrow_mut().push(s.to_string())),
+        )
         .unwrap();
     assert_eq!(resp.text, "The answer is 42.");
     assert_eq!(thinking.borrow().join(""), "Let me think.");
@@ -348,12 +353,13 @@ async fn async_chat_stream_rich_separates_over_http() {
     let thinking = Rc::new(RefCell::new(Vec::<String>::new()));
     let d = Rc::clone(&deltas);
     let t = Rc::clone(&thinking);
-    let client = OpenAiAsyncClient::with_base_url(
-        "sk-test",
-        "gpt-4o",
-        format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 0, base_delay_ms: 1, max_delay_ms: 10 });
+    let client =
+        OpenAiAsyncClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 0,
+                base_delay_ms: 1,
+                max_delay_ms: 10,
+            });
     let resp = client
         .chat_stream_rich(
             &[ChatMessage::user("hi")],
@@ -378,12 +384,13 @@ async fn async_chat_stream_classic_delta_receives_thinking_over_http() {
 
     let (port, handle) = server_for(REASONING_STREAM);
     let mut deltas = Vec::new();
-    let client = OpenAiAsyncClient::with_base_url(
-        "sk-test",
-        "gpt-4o",
-        format!("http://127.0.0.1:{port}"),
-    )
-    .with_retry_config(RetryConfig { max_retries: 0, base_delay_ms: 1, max_delay_ms: 10 });
+    let client =
+        OpenAiAsyncClient::with_base_url("sk-test", "gpt-4o", format!("http://127.0.0.1:{port}"))
+            .with_retry_config(RetryConfig {
+                max_retries: 0,
+                base_delay_ms: 1,
+                max_delay_ms: 10,
+            });
     let resp = client
         .chat_stream(
             &[ChatMessage::user("hi")],

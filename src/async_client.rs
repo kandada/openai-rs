@@ -176,7 +176,11 @@ impl OpenAiAsyncClient {
         }
     }
 
-    pub(crate) async fn post(&self, path: &str, body: serde_json::Value) -> Result<reqwest::Response> {
+    pub(crate) async fn post(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<reqwest::Response> {
         let cfg = &self.retry_config;
         let mut attempt = 0u32;
         loop {
@@ -206,9 +210,11 @@ impl OpenAiAsyncClient {
         if let Some(ref org) = self.organization {
             req = req.header("OpenAI-Organization", org);
         }
-        let resp = req.json(body).send().await.map_err(|e| {
-            OpenAiError::Network(e.to_string())
-        })?;
+        let resp = req
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| OpenAiError::Network(e.to_string()))?;
         if !resp.status().is_success() {
             let code = resp.status().as_u16();
             let retry_after = resp
@@ -222,7 +228,11 @@ impl OpenAiAsyncClient {
         Ok(resp)
     }
 
-    pub(crate) async fn post_stream(&self, path: &str, body: serde_json::Value) -> Result<reqwest::Response> {
+    pub(crate) async fn post_stream(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<reqwest::Response> {
         let cfg = &self.retry_config;
         let mut attempt = 0u32;
         loop {
@@ -243,7 +253,11 @@ impl OpenAiAsyncClient {
         }
     }
 
-    async fn post_stream_once(&self, path: &str, body: &serde_json::Value) -> Result<reqwest::Response> {
+    async fn post_stream_once(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<reqwest::Response> {
         let mut req = self
             .client
             .post(self.endpoint(path))
@@ -253,9 +267,11 @@ impl OpenAiAsyncClient {
         if let Some(ref org) = self.organization {
             req = req.header("OpenAI-Organization", org);
         }
-        let resp = req.json(body).send().await.map_err(|e| {
-            OpenAiError::Network(e.to_string())
-        })?;
+        let resp = req
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| OpenAiError::Network(e.to_string()))?;
         if !resp.status().is_success() {
             let code = resp.status().as_u16();
             let retry_after = resp

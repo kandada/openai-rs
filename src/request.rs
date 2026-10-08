@@ -56,7 +56,10 @@ pub struct ResponseFormat {
 
 impl ResponseFormat {
     pub fn json_object() -> Self {
-        ResponseFormat { format_type: "json_object".into(), json_schema: None }
+        ResponseFormat {
+            format_type: "json_object".into(),
+            json_schema: None,
+        }
     }
     pub fn json_schema(name: impl Into<String>, schema: Value, strict: bool) -> Self {
         ResponseFormat {
@@ -129,28 +132,94 @@ impl ChatCompletionRequest {
         }
     }
 
-    pub fn temperature(mut self, v: f64) -> Self { self.temperature = Some(v); self }
-    pub fn top_p(mut self, v: f64) -> Self { self.top_p = Some(v); self }
-    pub fn n(mut self, v: i32) -> Self { self.n = Some(v); self }
-    pub fn stream(mut self, v: bool) -> Self { self.stream = v; self }
-    pub fn stop(mut self, v: Vec<String>) -> Self { self.stop = Some(v); self }
-    pub fn max_tokens(mut self, v: u64) -> Self { self.max_tokens = Some(v); self }
-    pub fn max_completion_tokens(mut self, v: u64) -> Self { self.max_completion_tokens = Some(v); self }
-    pub fn presence_penalty(mut self, v: f64) -> Self { self.presence_penalty = Some(v); self }
-    pub fn frequency_penalty(mut self, v: f64) -> Self { self.frequency_penalty = Some(v); self }
-    pub fn seed(mut self, v: i64) -> Self { self.seed = Some(v); self }
-    pub fn tools(mut self, v: Vec<Tool>) -> Self { self.tools = Some(v); self }
-    pub fn tool_choice(mut self, v: ToolChoice) -> Self { self.tool_choice = Some(v); self }
-    pub fn parallel_tool_calls(mut self, v: bool) -> Self { self.parallel_tool_calls = Some(v); self }
-    pub fn response_format(mut self, v: ResponseFormat) -> Self { self.response_format = Some(v); self }
-    pub fn stream_options(mut self, v: StreamOptions) -> Self { self.stream_options = Some(v); self }
-    pub fn reasoning_effort(mut self, v: impl Into<String>) -> Self { self.reasoning_effort = Some(v.into()); self }
-    pub fn logprobs(mut self, v: bool) -> Self { self.logprobs = Some(v); self }
-    pub fn top_logprobs(mut self, v: i32) -> Self { self.top_logprobs = Some(v); self }
-    pub fn logit_bias(mut self, v: Value) -> Self { self.logit_bias = Some(v); self }
-    pub fn store(mut self, v: bool) -> Self { self.store = Some(v); self }
-    pub fn service_tier(mut self, v: impl Into<String>) -> Self { self.service_tier = Some(v.into()); self }
-    pub fn user(mut self, v: impl Into<String>) -> Self { self.user = Some(v.into()); self }
+    pub fn temperature(mut self, v: f64) -> Self {
+        self.temperature = Some(v);
+        self
+    }
+    pub fn top_p(mut self, v: f64) -> Self {
+        self.top_p = Some(v);
+        self
+    }
+    pub fn n(mut self, v: i32) -> Self {
+        self.n = Some(v);
+        self
+    }
+    pub fn stream(mut self, v: bool) -> Self {
+        self.stream = v;
+        self
+    }
+    pub fn stop(mut self, v: Vec<String>) -> Self {
+        self.stop = Some(v);
+        self
+    }
+    pub fn max_tokens(mut self, v: u64) -> Self {
+        self.max_tokens = Some(v);
+        self
+    }
+    pub fn max_completion_tokens(mut self, v: u64) -> Self {
+        self.max_completion_tokens = Some(v);
+        self
+    }
+    pub fn presence_penalty(mut self, v: f64) -> Self {
+        self.presence_penalty = Some(v);
+        self
+    }
+    pub fn frequency_penalty(mut self, v: f64) -> Self {
+        self.frequency_penalty = Some(v);
+        self
+    }
+    pub fn seed(mut self, v: i64) -> Self {
+        self.seed = Some(v);
+        self
+    }
+    pub fn tools(mut self, v: Vec<Tool>) -> Self {
+        self.tools = Some(v);
+        self
+    }
+    pub fn tool_choice(mut self, v: ToolChoice) -> Self {
+        self.tool_choice = Some(v);
+        self
+    }
+    pub fn parallel_tool_calls(mut self, v: bool) -> Self {
+        self.parallel_tool_calls = Some(v);
+        self
+    }
+    pub fn response_format(mut self, v: ResponseFormat) -> Self {
+        self.response_format = Some(v);
+        self
+    }
+    pub fn stream_options(mut self, v: StreamOptions) -> Self {
+        self.stream_options = Some(v);
+        self
+    }
+    pub fn reasoning_effort(mut self, v: impl Into<String>) -> Self {
+        self.reasoning_effort = Some(v.into());
+        self
+    }
+    pub fn logprobs(mut self, v: bool) -> Self {
+        self.logprobs = Some(v);
+        self
+    }
+    pub fn top_logprobs(mut self, v: i32) -> Self {
+        self.top_logprobs = Some(v);
+        self
+    }
+    pub fn logit_bias(mut self, v: Value) -> Self {
+        self.logit_bias = Some(v);
+        self
+    }
+    pub fn store(mut self, v: bool) -> Self {
+        self.store = Some(v);
+        self
+    }
+    pub fn service_tier(mut self, v: impl Into<String>) -> Self {
+        self.service_tier = Some(v.into());
+        self
+    }
+    pub fn user(mut self, v: impl Into<String>) -> Self {
+        self.user = Some(v.into());
+        self
+    }
 
     /// Build the JSON body for this request.
     pub fn build_body(&self) -> Value {
@@ -175,27 +244,64 @@ impl ChatCompletionRequest {
             body["max_tokens"] = json!(self.max_tokens.unwrap_or(4096));
         }
 
-        if let Some(v) = self.top_p { body["top_p"] = json!(v); }
-        if let Some(v) = self.n { body["n"] = json!(v); }
-        if let Some(ref v) = self.stop { body["stop"] = json!(v); }
-        if let Some(v) = self.presence_penalty { body["presence_penalty"] = json!(v); }
-        if let Some(v) = self.frequency_penalty { body["frequency_penalty"] = json!(v); }
-        if let Some(v) = self.seed { body["seed"] = json!(v); }
-        if let Some(ref v) = self.tools {
-            let arr: Vec<Value> = v.iter().map(|t| serde_json::to_value(t).unwrap_or_default()).collect();
-            body["tools"] = Value::Array(arr);
-            body["tool_choice"] = serde_json::to_value(self.tool_choice.as_ref().unwrap_or(&ToolChoice::auto())).unwrap_or_default();
+        if let Some(v) = self.top_p {
+            body["top_p"] = json!(v);
         }
-        if let Some(v) = self.parallel_tool_calls { body["parallel_tool_calls"] = json!(v); }
-        if let Some(ref v) = self.response_format { body["response_format"] = serde_json::to_value(v).unwrap_or_default(); }
-        if let Some(ref v) = self.stream_options { body["stream_options"] = serde_json::to_value(v).unwrap_or_default(); }
-        if let Some(ref v) = self.reasoning_effort { body["reasoning_effort"] = json!(v); }
-        if let Some(v) = self.logprobs { body["logprobs"] = json!(v); }
-        if let Some(v) = self.top_logprobs { body["top_logprobs"] = json!(v); }
-        if let Some(ref v) = self.logit_bias { body["logit_bias"] = v.clone(); }
-        if let Some(v) = self.store { body["store"] = json!(v); }
-        if let Some(ref v) = self.service_tier { body["service_tier"] = json!(v); }
-        if let Some(ref v) = self.user { body["user"] = json!(v); }
+        if let Some(v) = self.n {
+            body["n"] = json!(v);
+        }
+        if let Some(ref v) = self.stop {
+            body["stop"] = json!(v);
+        }
+        if let Some(v) = self.presence_penalty {
+            body["presence_penalty"] = json!(v);
+        }
+        if let Some(v) = self.frequency_penalty {
+            body["frequency_penalty"] = json!(v);
+        }
+        if let Some(v) = self.seed {
+            body["seed"] = json!(v);
+        }
+        if let Some(ref v) = self.tools {
+            let arr: Vec<Value> = v
+                .iter()
+                .map(|t| serde_json::to_value(t).unwrap_or_default())
+                .collect();
+            body["tools"] = Value::Array(arr);
+            body["tool_choice"] =
+                serde_json::to_value(self.tool_choice.as_ref().unwrap_or(&ToolChoice::auto()))
+                    .unwrap_or_default();
+        }
+        if let Some(v) = self.parallel_tool_calls {
+            body["parallel_tool_calls"] = json!(v);
+        }
+        if let Some(ref v) = self.response_format {
+            body["response_format"] = serde_json::to_value(v).unwrap_or_default();
+        }
+        if let Some(ref v) = self.stream_options {
+            body["stream_options"] = serde_json::to_value(v).unwrap_or_default();
+        }
+        if let Some(ref v) = self.reasoning_effort {
+            body["reasoning_effort"] = json!(v);
+        }
+        if let Some(v) = self.logprobs {
+            body["logprobs"] = json!(v);
+        }
+        if let Some(v) = self.top_logprobs {
+            body["top_logprobs"] = json!(v);
+        }
+        if let Some(ref v) = self.logit_bias {
+            body["logit_bias"] = v.clone();
+        }
+        if let Some(v) = self.store {
+            body["store"] = json!(v);
+        }
+        if let Some(ref v) = self.service_tier {
+            body["service_tier"] = json!(v);
+        }
+        if let Some(ref v) = self.user {
+            body["user"] = json!(v);
+        }
 
         body
     }
@@ -222,7 +328,11 @@ mod tests {
 
     #[test]
     fn test_full_body() {
-        let tools = vec![Tool::function("fn", "desc", json!({"type":"object","properties":{}}))];
+        let tools = vec![Tool::function(
+            "fn",
+            "desc",
+            json!({"type":"object","properties":{}}),
+        )];
         let body = ChatCompletionRequest::new("gpt-4o", make_messages())
             .temperature(0.5)
             .top_p(0.9)
@@ -261,7 +371,8 @@ mod tests {
 
     #[test]
     fn test_response_format_json_schema() {
-        let schema = json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]});
+        let schema =
+            json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]});
         let body = ChatCompletionRequest::new("gpt-4o", make_messages())
             .response_format(ResponseFormat::json_schema("MySchema", schema, true))
             .build_body();
@@ -275,7 +386,9 @@ mod tests {
     fn test_stream_options() {
         let body = ChatCompletionRequest::new("gpt-4o", make_messages())
             .stream(true)
-            .stream_options(StreamOptions { include_usage: Some(true) })
+            .stream_options(StreamOptions {
+                include_usage: Some(true),
+            })
             .build_body();
         assert_eq!(body["stream"], true);
         assert_eq!(body["stream_options"]["include_usage"], true);
@@ -319,7 +432,11 @@ mod tests {
     fn test_body_serializable() {
         let body = ChatCompletionRequest::new("gpt-4o", make_messages())
             .temperature(0.5)
-            .tools(vec![Tool::function("f", "d", json!({"type":"object","properties":{}}))])
+            .tools(vec![Tool::function(
+                "f",
+                "d",
+                json!({"type":"object","properties":{}}),
+            )])
             .build_body();
         let s = serde_json::to_string(&body).unwrap();
         assert!(s.contains("gpt-4o"));

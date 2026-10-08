@@ -3,10 +3,10 @@
 
 //! Embeddings API — generate text embeddings.
 
-use serde_json::Value;
 use crate::client::OpenAiClient;
 use crate::error::Result;
 use crate::types::EmbeddingResponse;
+use serde_json::Value;
 
 impl OpenAiClient {
     /// Create embeddings for the given input(s).
@@ -22,7 +22,12 @@ impl OpenAiClient {
         let input_value = if input_arr.len() == 1 {
             Value::String(input_arr[0].to_string())
         } else {
-            Value::Array(input_arr.iter().map(|s| Value::String(s.to_string())).collect())
+            Value::Array(
+                input_arr
+                    .iter()
+                    .map(|s| Value::String(s.to_string()))
+                    .collect(),
+            )
         };
         let body = serde_json::json!({
             "model": model,

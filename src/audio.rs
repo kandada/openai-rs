@@ -21,7 +21,11 @@ pub struct SpeechRequest {
 }
 
 impl SpeechRequest {
-    pub fn new(model: impl Into<String>, input: impl Into<String>, voice: impl Into<String>) -> Self {
+    pub fn new(
+        model: impl Into<String>,
+        input: impl Into<String>,
+        voice: impl Into<String>,
+    ) -> Self {
         SpeechRequest {
             model: model.into(),
             input: input.into(),
@@ -30,14 +34,20 @@ impl SpeechRequest {
             response_format: None,
         }
     }
-    pub fn speed(mut self, v: f64) -> Self { self.speed = Some(v); self }
-    pub fn format(mut self, v: impl Into<String>) -> Self { self.response_format = Some(v.into()); self }
+    pub fn speed(mut self, v: f64) -> Self {
+        self.speed = Some(v);
+        self
+    }
+    pub fn format(mut self, v: impl Into<String>) -> Self {
+        self.response_format = Some(v.into());
+        self
+    }
 }
 
 /// Transcription request.
 #[derive(Debug, Clone, Serialize)]
 pub struct TranscriptionRequest {
-    pub file: String,      // base64 audio data
+    pub file: String, // base64 audio data
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
@@ -60,9 +70,18 @@ impl TranscriptionRequest {
             temperature: None,
         }
     }
-    pub fn language(mut self, v: impl Into<String>) -> Self { self.language = Some(v.into()); self }
-    pub fn prompt(mut self, v: impl Into<String>) -> Self { self.prompt = Some(v.into()); self }
-    pub fn temperature(mut self, v: f64) -> Self { self.temperature = Some(v); self }
+    pub fn language(mut self, v: impl Into<String>) -> Self {
+        self.language = Some(v.into());
+        self
+    }
+    pub fn prompt(mut self, v: impl Into<String>) -> Self {
+        self.prompt = Some(v.into());
+        self
+    }
+    pub fn temperature(mut self, v: f64) -> Self {
+        self.temperature = Some(v);
+        self
+    }
 }
 
 /// Transcription / Translation response.
@@ -95,7 +114,8 @@ impl OpenAiClient {
     /// Generate speech from text (TTS). Returns raw audio bytes.
     pub fn audio_speech(&self, request: &SpeechRequest) -> Result<Vec<u8>> {
         let body = serde_json::to_value(request)?;
-        let resp = self.agent
+        let resp = self
+            .agent
             .post(&self.endpoint("audio/speech"))
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
@@ -107,7 +127,10 @@ impl OpenAiClient {
     }
 
     /// Transcribe audio to text. `file_b64` should be base64-encoded audio.
-    pub fn audio_transcribe(&self, request: &TranscriptionRequest) -> Result<TranscriptionResponse> {
+    pub fn audio_transcribe(
+        &self,
+        request: &TranscriptionRequest,
+    ) -> Result<TranscriptionResponse> {
         let body = serde_json::to_value(request)?;
         let resp = self.post("audio/transcriptions", body)?;
         Ok(resp.into_json()?)
@@ -129,13 +152,19 @@ impl crate::async_client::OpenAiAsyncClient {
         Ok(resp.bytes().await?.to_vec())
     }
 
-    pub async fn audio_transcribe(&self, request: &TranscriptionRequest) -> Result<TranscriptionResponse> {
+    pub async fn audio_transcribe(
+        &self,
+        request: &TranscriptionRequest,
+    ) -> Result<TranscriptionResponse> {
         let body = serde_json::to_value(request)?;
         let resp = self.post("audio/transcriptions", body).await?;
         Ok(resp.json().await?)
     }
 
-    pub async fn audio_translate(&self, request: &TranscriptionRequest) -> Result<TranscriptionResponse> {
+    pub async fn audio_translate(
+        &self,
+        request: &TranscriptionRequest,
+    ) -> Result<TranscriptionResponse> {
         let body = serde_json::to_value(request)?;
         let resp = self.post("audio/translations", body).await?;
         Ok(resp.json().await?)

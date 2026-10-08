@@ -17,7 +17,13 @@ use openai_client_rs::*;
 
 fn parse_stream(raw: &str) -> LlmResponse {
     let cancel = AtomicBool::new(false);
-    parse_openai_stream(Cursor::new(raw.as_bytes().to_vec()), |_| {}, |_, _| {}, &cancel).unwrap()
+    parse_openai_stream(
+        Cursor::new(raw.as_bytes().to_vec()),
+        |_| {},
+        |_, _| {},
+        &cancel,
+    )
+    .unwrap()
 }
 
 // ── Empty / degenerate streams ─────────────────────────────────────────────
@@ -160,7 +166,10 @@ fn refusal_field_roundtrips() {
         "choices": [{"index": 0, "message": {"role": "assistant", "content": null, "refusal": "I can't do that"}, "finish_reason": "refusal"}]
     });
     let cc: ChatCompletion = serde_json::from_value(raw).unwrap();
-    assert_eq!(cc.choices[0].message.refusal.as_deref(), Some("I can't do that"));
+    assert_eq!(
+        cc.choices[0].message.refusal.as_deref(),
+        Some("I can't do that")
+    );
     assert_eq!(cc.choices[0].finish_reason.as_deref(), Some("refusal"));
     let resp = openai_client_rs::api_common::assemble_response(&cc);
     assert!(resp.text.is_empty()); // content is null → no panic
@@ -267,10 +276,16 @@ fn logprobs_typed_deserialization() {
 #[test]
 fn retryable_status_code_matrix() {
     for code in [408u16, 409, 429, 500, 502, 503, 504] {
-        assert!(OpenAiError::api(code, None, "x").is_retryable(), "code {code}");
+        assert!(
+            OpenAiError::api(code, None, "x").is_retryable(),
+            "code {code}"
+        );
     }
     for code in [400u16, 401, 403, 404, 405, 410, 422, 451] {
-        assert!(!OpenAiError::api(code, None, "x").is_retryable(), "code {code}");
+        assert!(
+            !OpenAiError::api(code, None, "x").is_retryable(),
+            "code {code}"
+        );
     }
     assert!(OpenAiError::Network("reset".into()).is_retryable());
     assert!(!OpenAiError::Json("bad".into()).is_retryable());
@@ -285,7 +300,8 @@ const OK_BODY: &str = r#"{"id":"c","object":"chat.completion","created":1,"model
 fn respond(req: tiny_http::Request, body: &str, status: u16, retry_after: Option<&str>) {
     let mut resp = tiny_http::Response::from_string(body.to_string()).with_status_code(status);
     if let Some(ra) = retry_after {
-        resp = resp.with_header(tiny_http::Header::from_bytes(b"Retry-After", ra.as_bytes()).unwrap());
+        resp =
+            resp.with_header(tiny_http::Header::from_bytes(b"Retry-After", ra.as_bytes()).unwrap());
     }
     req.respond(resp).unwrap();
 }

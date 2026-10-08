@@ -6,8 +6,8 @@
 //! Used by both sync and async clients. Mirrors the retry logic in official
 //! OpenAI Python SDK — retries on 429, 5xx, and network errors with jitter.
 
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 /// Configuration for automatic retries.
 #[derive(Debug, Clone)]
@@ -32,7 +32,10 @@ impl Default for RetryConfig {
 
 impl RetryConfig {
     pub fn new(max_retries: u32) -> Self {
-        RetryConfig { max_retries, ..Default::default() }
+        RetryConfig {
+            max_retries,
+            ..Default::default()
+        }
     }
 
     /// Compute delay for attempt `n` (0-indexed) with jitter.
@@ -92,7 +95,11 @@ fn rand_f64() -> f64 {
 }
 
 /// Execute a sync closure with retry logic, returning the result or last error.
-pub fn retry_sync<F, T, E>(mut f: F, config: &RetryConfig, is_retryable: fn(&E) -> bool) -> Result<T, E>
+pub fn retry_sync<F, T, E>(
+    mut f: F,
+    config: &RetryConfig,
+    is_retryable: fn(&E) -> bool,
+) -> Result<T, E>
 where
     F: FnMut() -> Result<T, E>,
 {
@@ -153,7 +160,11 @@ mod tests {
 
     #[test]
     fn test_delay_capped() {
-        let config = RetryConfig { max_retries: 10, base_delay_ms: 1000, max_delay_ms: 5000 };
+        let config = RetryConfig {
+            max_retries: 10,
+            base_delay_ms: 1000,
+            max_delay_ms: 5000,
+        };
         for i in 5..10 {
             assert!(config.delay_ms(i) <= 5000 + 1250, "delay should be capped");
         }
@@ -169,12 +180,20 @@ mod tests {
 
     #[test]
     fn test_retry_succeeds_after_failures() {
-        let config = RetryConfig { max_retries: 3, base_delay_ms: 1, max_delay_ms: 10 };
+        let config = RetryConfig {
+            max_retries: 3,
+            base_delay_ms: 1,
+            max_delay_ms: 10,
+        };
         let mut calls = 0;
         let result: Result<i32, &str> = retry_sync(
             || {
                 calls += 1;
-                if calls < 3 { Err("fail") } else { Ok(42) }
+                if calls < 3 {
+                    Err("fail")
+                } else {
+                    Ok(42)
+                }
             },
             &config,
             |_| true,
@@ -185,12 +204,19 @@ mod tests {
 
     #[test]
     fn test_retry_stops_on_non_retryable() {
-        let config = RetryConfig { max_retries: 3, base_delay_ms: 1, max_delay_ms: 10 };
+        let config = RetryConfig {
+            max_retries: 3,
+            base_delay_ms: 1,
+            max_delay_ms: 10,
+        };
         let mut calls = 0;
         let result: Result<i32, &str> = retry_sync(
-            || { calls += 1; Err("fatal") },
+            || {
+                calls += 1;
+                Err("fatal")
+            },
             &config,
-            |_| false,  // never retryable
+            |_| false, // never retryable
         );
         assert!(result.is_err());
         assert_eq!(calls, 1);

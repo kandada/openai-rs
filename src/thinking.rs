@@ -115,7 +115,12 @@ impl ThinkTagParser {
                 push_segment(&mut out_think, emit_part, false, self.first_think_pending);
                 self.first_think_pending = false;
             } else {
-                push_segment(&mut out_content, emit_part, false, self.first_content_pending);
+                push_segment(
+                    &mut out_content,
+                    emit_part,
+                    false,
+                    self.first_content_pending,
+                );
                 self.first_content_pending = false;
             }
         }

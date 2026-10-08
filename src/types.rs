@@ -103,9 +103,7 @@ impl ChatMessage {
 
     /// Create a user message with image(s).
     pub fn user_with_images(text: impl Into<String>, image_urls: &[&str]) -> Self {
-        let mut parts = vec![ContentPart::Text {
-            text: text.into(),
-        }];
+        let mut parts = vec![ContentPart::Text { text: text.into() }];
         for url in image_urls {
             parts.push(ContentPart::ImageUrl {
                 image_url: ImageUrl {
@@ -238,7 +236,11 @@ pub struct Tool {
 }
 
 impl Tool {
-    pub fn function(name: impl Into<String>, description: impl Into<String>, parameters: Value) -> Self {
+    pub fn function(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Value,
+    ) -> Self {
         Tool {
             tool_type: "function".into(),
             function: ToolFunction {
@@ -313,9 +315,7 @@ impl ToolChoice {
     pub fn specific(name: impl Into<String>) -> Self {
         ToolChoice::Specific {
             choice_type: "function".into(),
-            function: ToolChoiceFunction {
-                name: name.into(),
-            },
+            function: ToolChoiceFunction { name: name.into() },
         }
     }
 }

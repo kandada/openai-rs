@@ -3,9 +3,9 @@
 
 //! Images API — DALL-E image generation, editing, variations.
 
-use serde::{Deserialize, Serialize};
 use crate::client::OpenAiClient;
 use crate::error::Result;
+use serde::{Deserialize, Serialize};
 
 /// Image generation request parameters.
 #[derive(Debug, Clone, Serialize)]
@@ -40,13 +40,34 @@ impl ImageRequest {
             user: None,
         }
     }
-    pub fn model(mut self, v: impl Into<String>) -> Self { self.model = Some(v.into()); self }
-    pub fn n(mut self, v: i32) -> Self { self.n = Some(v); self }
-    pub fn size(mut self, v: impl Into<String>) -> Self { self.size = Some(v.into()); self }
-    pub fn quality(mut self, v: impl Into<String>) -> Self { self.quality = Some(v.into()); self }
-    pub fn style(mut self, v: impl Into<String>) -> Self { self.style = Some(v.into()); self }
-    pub fn response_format(mut self, v: impl Into<String>) -> Self { self.response_format = Some(v.into()); self }
-    pub fn user(mut self, v: impl Into<String>) -> Self { self.user = Some(v.into()); self }
+    pub fn model(mut self, v: impl Into<String>) -> Self {
+        self.model = Some(v.into());
+        self
+    }
+    pub fn n(mut self, v: i32) -> Self {
+        self.n = Some(v);
+        self
+    }
+    pub fn size(mut self, v: impl Into<String>) -> Self {
+        self.size = Some(v.into());
+        self
+    }
+    pub fn quality(mut self, v: impl Into<String>) -> Self {
+        self.quality = Some(v.into());
+        self
+    }
+    pub fn style(mut self, v: impl Into<String>) -> Self {
+        self.style = Some(v.into());
+        self
+    }
+    pub fn response_format(mut self, v: impl Into<String>) -> Self {
+        self.response_format = Some(v.into());
+        self
+    }
+    pub fn user(mut self, v: impl Into<String>) -> Self {
+        self.user = Some(v.into());
+        self
+    }
 }
 
 /// Image generation response.
@@ -89,9 +110,15 @@ impl OpenAiClient {
             "image": image_b64,
             "prompt": prompt,
         });
-        if let Some(m) = mask_b64 { body["mask"] = serde_json::json!(m); }
-        if let Some(n) = n { body["n"] = serde_json::json!(n); }
-        if let Some(s) = size { body["size"] = serde_json::json!(s); }
+        if let Some(m) = mask_b64 {
+            body["mask"] = serde_json::json!(m);
+        }
+        if let Some(n) = n {
+            body["n"] = serde_json::json!(n);
+        }
+        if let Some(s) = size {
+            body["size"] = serde_json::json!(s);
+        }
         let resp = self.post("images/edits", body)?;
         Ok(resp.into_json()?)
     }
@@ -104,8 +131,12 @@ impl OpenAiClient {
         size: Option<&str>,
     ) -> Result<ImageResponse> {
         let mut body = serde_json::json!({ "image": image_b64 });
-        if let Some(n) = n { body["n"] = serde_json::json!(n); }
-        if let Some(s) = size { body["size"] = serde_json::json!(s); }
+        if let Some(n) = n {
+            body["n"] = serde_json::json!(n);
+        }
+        if let Some(s) = size {
+            body["size"] = serde_json::json!(s);
+        }
         let resp = self.post("images/variations", body)?;
         Ok(resp.into_json()?)
     }
@@ -138,7 +169,8 @@ mod tests {
 
     #[test]
     fn test_image_response_deserialize() {
-        let json = r#"{"created":123,"data":[{"url":"http://x.com/a.png","revised_prompt":"a cat"}]}"#;
+        let json =
+            r#"{"created":123,"data":[{"url":"http://x.com/a.png","revised_prompt":"a cat"}]}"#;
         let resp: ImageResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.data.len(), 1);
         assert_eq!(resp.data[0].url.as_deref(), Some("http://x.com/a.png"));

@@ -15,7 +15,9 @@ use crate::chat::{ClassicSink, StreamHandler, StreamSink};
 use crate::error::{OpenAiError, Result};
 use crate::request::ChatCompletionRequest;
 use crate::thinking::{self, ThinkTagParser};
-use crate::types::{ChatCompletion, ChatCompletionChunk, ChatMessage, LlmResponse, SimplifiedToolCall, Tool, Usage};
+use crate::types::{
+    ChatCompletion, ChatCompletionChunk, ChatMessage, LlmResponse, SimplifiedToolCall, Tool, Usage,
+};
 
 /// Async stream of raw, typed [`ChatCompletionChunk`]s.
 pub struct AsyncChatChunkStream<S> {
@@ -27,7 +29,9 @@ where
     S: futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Unpin,
 {
     pub fn new(stream: S) -> Self {
-        AsyncChatChunkStream { sse: AsyncSseStream::new(stream) }
+        AsyncChatChunkStream {
+            sse: AsyncSseStream::new(stream),
+        }
     }
 }
 
@@ -95,7 +99,10 @@ impl OpenAiAsyncClient {
         let resp = self.post_stream("chat/completions", body).await?;
         let stream = resp.bytes_stream();
         let mut sse = AsyncSseStream::new(stream);
-        let mut sink = ClassicSink { on_delta, on_tool_call };
+        let mut sink = ClassicSink {
+            on_delta,
+            on_tool_call,
+        };
         parse_chat_stream(&mut sse, &mut sink).await
     }
 
@@ -132,7 +139,10 @@ impl OpenAiAsyncClient {
         let resp = self.post_stream("chat/completions", body).await?;
         let stream = resp.bytes_stream();
         let mut sse = AsyncSseStream::new(stream);
-        let mut sink = ClassicSink { on_delta, on_tool_call };
+        let mut sink = ClassicSink {
+            on_delta,
+            on_tool_call,
+        };
         parse_chat_stream(&mut sse, &mut sink).await
     }
 
@@ -154,15 +164,23 @@ impl OpenAiAsyncClient {
         &self,
         messages: &[ChatMessage],
         tools: Option<&[Tool]>,
-    ) -> Result<AsyncChatChunkStream<
-        std::pin::Pin<
-            Box<dyn futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Send>,
+    ) -> Result<
+        AsyncChatChunkStream<
+            std::pin::Pin<
+                Box<
+                    dyn futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>>
+                        + Send,
+                >,
+            >,
         >,
-    >> {
+    > {
         let body = self.build_chat_body(messages, tools, true, None);
         let resp = self.post_stream("chat/completions", body).await?;
         let s: std::pin::Pin<
-            Box<dyn futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Send>,
+            Box<
+                dyn futures::Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>>
+                    + Send,
+            >,
         > = Box::pin(resp.bytes_stream());
         Ok(AsyncChatChunkStream::new(s))
     }
@@ -218,17 +236,25 @@ where
     while let Some(payload) = sse.next_data().await? {
         total_payloads += 1;
         let chunk: Value = match serde_json::from_str(&payload) {
-            Ok(v) => { valid_chunks += 1; v }
+            Ok(v) => {
+                valid_chunks += 1;
+                v
+            }
             Err(_) => continue,
         };
         if let Some(err) = chunk.get("error") {
-            let msg = err.get("message").and_then(|v| v.as_str())
+            let msg = err
+                .get("message")
+                .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| err.to_string());
             return Err(OpenAiError::stream_error(format!("stream error: {msg}")));
         }
         // Final usage chunk (stream_options.include_usage) has empty choices.
-        if let Some(u) = chunk.get("usage").and_then(|u| serde_json::from_value(u.clone()).ok()) {
+        if let Some(u) = chunk
+            .get("usage")
+            .and_then(|u| serde_json::from_value(u.clone()).ok())
+        {
             usage = Some(u);
         }
         let choice = match chunk.get("choices").and_then(|c| c.get(0)) {
@@ -256,11 +282,15 @@ where
                 let idx = tc.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
                 let acc = tool_accs.entry(idx).or_default();
                 if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
-                    if !id.is_empty() { acc.id = id.to_string(); }
+                    if !id.is_empty() {
+                        acc.id = id.to_string();
+                    }
                 }
                 if let Some(func) = tc.get("function") {
                     if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
-                        if !name.is_empty() { acc.name.push_str(name); }
+                        if !name.is_empty() {
+                            acc.name.push_str(name);
+                        }
                     }
                     if let Some(args) = func.get("arguments").and_then(|v| v.as_str()) {
                         acc.arguments.push_str(args);
@@ -280,13 +310,21 @@ where
     }
 
     if total_payloads > 0 && valid_chunks == 0 {
-        return Err(OpenAiError::stream_error("stream returned no parseable data"));
+        return Err(OpenAiError::stream_error(
+            "stream returned no parseable data",
+        ));
     }
 
     let mut tool_calls = Vec::new();
     for (i, (_, acc)) in tool_accs.into_iter().enumerate() {
-        if acc.name.is_empty() { continue; }
-        let id = if acc.id.is_empty() { format!("call_{i}") } else { acc.id };
+        if acc.name.is_empty() {
+            continue;
+        }
+        let id = if acc.id.is_empty() {
+            format!("call_{i}")
+        } else {
+            acc.id
+        };
         sink.tool_call(&acc.name, &acc.arguments);
         tool_calls.push(SimplifiedToolCall {
             id,
@@ -302,7 +340,11 @@ where
     Ok(LlmResponse {
         text,
         tool_calls,
-        reasoning_content: if reasoning.is_empty() { None } else { Some(reasoning) },
+        reasoning_content: if reasoning.is_empty() {
+            None
+        } else {
+            Some(reasoning)
+        },
         finish_reason,
         usage,
         raw: None,
@@ -317,7 +359,9 @@ mod tests {
 
     type BytesResult = std::result::Result<bytes::Bytes, reqwest::Error>;
 
-    fn make_sse_stream(data: &'static str) -> Pin<Box<dyn futures::Stream<Item = BytesResult> + Send>> {
+    fn make_sse_stream(
+        data: &'static str,
+    ) -> Pin<Box<dyn futures::Stream<Item = BytesResult> + Send>> {
         Box::pin(stream::once(async move { Ok(bytes::Bytes::from(data)) }))
     }
 
